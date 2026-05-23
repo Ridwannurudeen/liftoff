@@ -33,9 +33,12 @@ contract LaunchFactory {
         uint24 baselineFee;
         uint64 launchWindow;
         uint256 maxBuyPerTx;
+        uint256 maxBuyPerWallet;
         uint256 graduationVolume;
         uint64 lpLockUntil;
         uint256 maxSellPerTx;
+        uint256 maxSellPerWallet;
+        uint16 maxSellBpsOfReserve;
     }
 
     event Launched(address indexed token, PoolId indexed poolId, address indexed launcher);
@@ -64,9 +67,12 @@ contract LaunchFactory {
                 baselineFee: p.baselineFee,
                 launchWindow: p.launchWindow,
                 maxBuyPerTx: p.maxBuyPerTx,
+                maxBuyPerWallet: p.maxBuyPerWallet,
                 graduationVolume: p.graduationVolume,
                 lpLockUntil: p.lpLockUntil,
-                maxSellPerTx: p.maxSellPerTx
+                maxSellPerTx: p.maxSellPerTx,
+                maxSellPerWallet: p.maxSellPerWallet,
+                maxSellBpsOfReserve: p.maxSellBpsOfReserve
             })
         );
 

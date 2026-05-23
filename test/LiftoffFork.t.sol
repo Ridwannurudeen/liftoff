@@ -75,7 +75,7 @@ contract LiftoffForkTest is Test {
                     | Hooks.BEFORE_REMOVE_LIQUIDITY_FLAG
             ) ^ (0x6666 << 144)
         );
-        deployCodeTo("Liftoff.sol:Liftoff", abi.encode(pm), flags);
+        deployCodeTo("Liftoff.sol:Liftoff", abi.encode(pm, address(0)), flags);
         hook = Liftoff(flags);
 
         key = PoolKey(c0, c1, LPFeeLibrary.DYNAMIC_FEE_FLAG, 60, IHooks(hook));
@@ -90,9 +90,12 @@ contract LiftoffForkTest is Test {
                 baselineFee: END_FEE,
                 launchWindow: WINDOW,
                 maxBuyPerTx: 0, // disable cap for the fork end-to-end run
+                maxBuyPerWallet: 0,
                 graduationVolume: 1e18,
                 lpLockUntil: uint64(block.timestamp + 1 days),
-                maxSellPerTx: 0
+                maxSellPerTx: 0,
+                maxSellPerWallet: 0,
+                maxSellBpsOfReserve: 0
             })
         );
 

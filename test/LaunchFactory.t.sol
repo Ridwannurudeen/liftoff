@@ -45,7 +45,7 @@ contract LaunchFactoryTest is BaseTest {
                     | Hooks.BEFORE_REMOVE_LIQUIDITY_FLAG
             ) ^ (0x7777 << 144)
         );
-        deployCodeTo("Liftoff.sol:Liftoff", abi.encode(poolManager), flags);
+        deployCodeTo("Liftoff.sol:Liftoff", abi.encode(poolManager, address(0)), flags);
         hook = Liftoff(flags);
 
         factory = new LaunchFactory(poolManager, hook);
@@ -65,9 +65,12 @@ contract LaunchFactoryTest is BaseTest {
                 baselineFee: 3_000,
                 launchWindow: 1 hours,
                 maxBuyPerTx: 0,
+                maxBuyPerWallet: 0,
                 graduationVolume: 1e18,
                 lpLockUntil: uint64(block.timestamp + 1 days),
-                maxSellPerTx: 0
+                maxSellPerTx: 0,
+                maxSellPerWallet: 0,
+                maxSellBpsOfReserve: 0
             })
         );
         tokenIsC0 = Currency.unwrap(key.currency0) == token;

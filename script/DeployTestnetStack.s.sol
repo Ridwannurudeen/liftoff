@@ -8,6 +8,7 @@ import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import {HookMiner} from "@uniswap/v4-periphery/src/utils/HookMiner.sol";
 
 import {Liftoff} from "../src/Liftoff.sol";
+import {LiftoffRouter} from "../src/LiftoffRouter.sol";
 import {LaunchFactory} from "../src/LaunchFactory.sol";
 
 /// @notice Deploys a full Liftoff stack to X Layer TESTNET (chainId 1952), where Uniswap v4 is not
@@ -30,11 +31,15 @@ contract DeployTestnetStack is Script {
         vm.startBroadcast(pk);
 
         PoolManager poolManager = new PoolManager(deployer);
+        LiftoffRouter router = new LiftoffRouter(IPoolManager(address(poolManager)));
 
         (address hookAddress, bytes32 salt) = HookMiner.find(
-            CREATE2_FACTORY, flags, type(Liftoff).creationCode, abi.encode(IPoolManager(address(poolManager)))
+            CREATE2_FACTORY,
+            flags,
+            type(Liftoff).creationCode,
+            abi.encode(IPoolManager(address(poolManager)), address(router))
         );
-        Liftoff hook = new Liftoff{salt: salt}(IPoolManager(address(poolManager)));
+        Liftoff hook = new Liftoff{salt: salt}(IPoolManager(address(poolManager)), address(router));
         require(address(hook) == hookAddress, "DeployTestnetStack: hook address mismatch");
 
         LaunchFactory factory = new LaunchFactory(IPoolManager(address(poolManager)), hook);
@@ -43,6 +48,7 @@ contract DeployTestnetStack is Script {
 
         console.log("X Layer testnet (1952) deploy:");
         console.log("  PoolManager  :", address(poolManager));
+        console.log("  LiftoffRouter:", address(router));
         console.log("  Liftoff hook :", address(hook));
         console.log("  LaunchFactory:", address(factory));
     }

@@ -36,7 +36,7 @@ contract LiftoffFuzzTest is BaseTest {
                     | Hooks.BEFORE_REMOVE_LIQUIDITY_FLAG
             ) ^ (0x9999 << 144)
         );
-        deployCodeTo("Liftoff.sol:Liftoff", abi.encode(poolManager), flags);
+        deployCodeTo("Liftoff.sol:Liftoff", abi.encode(poolManager, address(0)), flags);
         hook = Liftoff(flags);
 
         MockERC20 a = new MockERC20("A", "A", 18);
@@ -54,9 +54,12 @@ contract LiftoffFuzzTest is BaseTest {
                 baselineFee: END_FEE,
                 launchWindow: WINDOW,
                 maxBuyPerTx: 0,
+                maxBuyPerWallet: 0,
                 graduationVolume: 1e18,
                 lpLockUntil: uint64(block.timestamp + 1 days),
-                maxSellPerTx: 0
+                maxSellPerTx: 0,
+                maxSellPerWallet: 0,
+                maxSellBpsOfReserve: 0
             })
         );
         poolManager.initialize(key, Constants.SQRT_PRICE_1_1);

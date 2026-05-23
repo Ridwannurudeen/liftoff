@@ -19,6 +19,7 @@ import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 import {HookMiner} from "@uniswap/v4-periphery/src/utils/HookMiner.sol";
 
 import {Liftoff} from "../src/Liftoff.sol";
+import {LiftoffRouter} from "../src/LiftoffRouter.sol";
 import {LaunchFactory} from "../src/LaunchFactory.sol";
 
 /// @notice One-command MAINNET deploy + live demo on X Layer (chainId 196), against the OFFICIAL
@@ -50,9 +51,10 @@ contract DeployMainnetStack is Script {
 
         vm.startBroadcast(pk);
 
+        LiftoffRouter router = new LiftoffRouter(pmgr);
         (address hookAddr, bytes32 salt) =
-            HookMiner.find(CREATE2_FACTORY, flags, type(Liftoff).creationCode, abi.encode(pmgr));
-        Liftoff hook = new Liftoff{salt: salt}(pmgr);
+            HookMiner.find(CREATE2_FACTORY, flags, type(Liftoff).creationCode, abi.encode(pmgr, address(router)));
+        Liftoff hook = new Liftoff{salt: salt}(pmgr, address(router));
         require(address(hook) == hookAddr, "hook addr mismatch");
 
         LaunchFactory factory = new LaunchFactory(pmgr, hook);
@@ -75,9 +77,12 @@ contract DeployMainnetStack is Script {
                 baselineFee: 3_000,
                 launchWindow: 1 hours,
                 maxBuyPerTx: 0,
+                maxBuyPerWallet: 0,
                 graduationVolume: 2e18, // small so the demo graduates in-script (by volume)
                 lpLockUntil: uint64(block.timestamp + 30 days),
-                maxSellPerTx: 0
+                maxSellPerTx: 0,
+                maxSellPerWallet: 0,
+                maxSellBpsOfReserve: 0
             })
         );
         tokenIsC0 = Currency.unwrap(key.currency0) == token;
@@ -113,6 +118,7 @@ contract DeployMainnetStack is Script {
         (, bool graduated,,, uint256 vol) = hook.states(id);
         console.log("=== Liftoff mainnet deploy (X Layer 196) ===");
         console.log("Liftoff hook :", address(hook));
+        console.log("LiftoffRouter:", address(router));
         console.log("LaunchFactory:", address(factory));
         console.log("Demo token   :", token);
         console.log("graduated    :", graduated);

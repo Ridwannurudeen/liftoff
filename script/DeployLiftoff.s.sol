@@ -7,8 +7,9 @@ import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {HookMiner} from "@uniswap/v4-periphery/src/utils/HookMiner.sol";
 
 import {Liftoff} from "../src/Liftoff.sol";
+import {LiftoffRouter} from "../src/LiftoffRouter.sol";
 
-/// @notice Deploys the Liftoff hook to X Layer against the official Uniswap v4 PoolManager.
+/// @notice Deploys the Liftoff hook (and its trusted router) to X Layer against the official Uniswap v4 PoolManager.
 /// Standalone (does not use the template's hookmate-based BaseScript, which lacks chainId 196).
 ///
 /// Usage:
@@ -27,16 +28,18 @@ contract DeployLiftoff is Script {
                 | Hooks.BEFORE_REMOVE_LIQUIDITY_FLAG
         );
 
-        bytes memory constructorArgs = abi.encode(poolManager);
+        vm.startBroadcast();
+        LiftoffRouter router = new LiftoffRouter(poolManager);
+
+        bytes memory constructorArgs = abi.encode(poolManager, address(router));
         (address hookAddress, bytes32 salt) =
             HookMiner.find(CREATE2_FACTORY, flags, type(Liftoff).creationCode, constructorArgs);
-
-        vm.startBroadcast();
-        Liftoff hook = new Liftoff{salt: salt}(poolManager);
+        Liftoff hook = new Liftoff{salt: salt}(poolManager, address(router));
         vm.stopBroadcast();
 
         require(address(hook) == hookAddress, "DeployLiftoff: hook address mismatch");
-        console.log("PoolManager:", address(poolManager));
-        console.log("Liftoff    :", address(hook));
+        console.log("PoolManager  :", address(poolManager));
+        console.log("LiftoffRouter:", address(router));
+        console.log("Liftoff      :", address(hook));
     }
 }
