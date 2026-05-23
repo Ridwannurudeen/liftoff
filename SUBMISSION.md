@@ -22,11 +22,14 @@ Launchpads on X Layer today run a bonding-curve contract in front of an AMM, the
 
 **Verification / completion:** 22/22 Foundry tests, including a **live fork test against the real X Layer PoolManager** and a narrated end-to-end lifecycle demo.
 
+**Deployed on X Layer mainnet (chainId 196, against the official Uniswap v4 PoolManager):**
+- **Liftoff hook:** `0xD1bb6559FA552df652bec86a7985d092d2a762c0` — https://www.oklink.com/xlayer/address/0xD1bb6559FA552df652bec86a7985d092d2a762c0
+- **LaunchFactory:** `0x46bb76E3ED7511d35258d6D506F89C85461167D7` — https://www.oklink.com/xlayer/address/0x46bb76E3ED7511d35258d6D506F89C85461167D7
+- **Demo token (LIFT):** `0xa04f9129A7C6c2E774EE1CD091815Ddd553d6C73` — https://www.oklink.com/xlayer/address/0xa04f9129A7C6c2E774EE1CD091815Ddd553d6C73
+- The deploy ran the full lifecycle on-chain (launch-fee buys → graduation by volume → baseline buy/sell), so Hook behavior is triggered by real transactions and inspectable on OKLink. All 17 deploy/lifecycle tx hashes are in `broadcast/DeployMainnetStack.s.sol/196/run-latest.json`.
+
 **Links (fill in):**
 - GitHub (public): `[ADD REPO URL]`
-- Deployed Liftoff hook on X Layer:
-  - mainnet (against official v4): `https://www.oklink.com/xlayer/address/[ADD ADDRESS]`
-  - OR testnet (chainId 1952, own PoolManager): `https://www.okx.com/web3/explorer/xlayer-test/address/[ADD ADDRESS]`
 - Demo video (2–5 min): `[ADD YOUTUBE/LOOM URL]`
 
 **Required social post:** see `X_POST.md` (tags @XLayerOfficial @Uniswap @flapdotsh).
