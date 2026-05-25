@@ -8,8 +8,10 @@ out/
 /broadcast/*/5/
 /broadcast/**/dry-run/
 
-# Docs
-docs/
+# Docs — ignore generated `forge doc` output, but keep authored design docs
+docs/*
+!docs/DESIGN-phase3-5.md
+!docs/ERC-launch-covenants.md
 
 # Dotenv file
 .env

@@ -22,6 +22,8 @@
 - **`liftoff-sdk`** (TypeScript) + a hosted launch dApp.
 - **Security:** invariant + fuzz tests, then a **third-party audit** before any real TVL. (Non-negotiable before real money — the current build is hackathon-grade.)
 
+> **Detailed Phase 3–5 design** (contract-level): [`docs/DESIGN-phase3-5.md`](docs/DESIGN-phase3-5.md) · standard draft: [`docs/ERC-launch-covenants.md`](docs/ERC-launch-covenants.md).
+
 ## Phase 3 — Become the X Layer launch standard (≈ months 2–4)
 - **flap partnership** (the 1st-prize lever): ship Liftoff as flap's v4-native launch mode on X Layer, replacing the curve→migration flow.
 - **Launchpad-as-a-service:** other apps embed Liftoff via the SDK; small protocol fee on launches.
