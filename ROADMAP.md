@@ -5,9 +5,10 @@
 ---
 
 ## Phase 0 — Built ✅ (hackathon core)
-- `Liftoff` v4 hook: anti-snipe decaying fee + buy cap, LP lock, automatic graduation, post-graduation anti-dump.
-- 22/22 tests, including a **live fork test against the real X Layer PoolManager**.
-- Standalone X Layer deploy script (HookMiner CREATE2), README.
+- `Liftoff` v4 hook: anti-snipe decaying fee + per-tx & per-wallet buy caps, LP lock, automatic graduation, post-graduation anti-dump (per-tx, per-wallet, and %-of-reserve sell caps), all enforced in `afterSwap` on realized amounts (correct for exact-input and exact-output).
+- `LiftoffRouter` for reliable per-wallet enforcement (tx.origin fallback) + `LaunchFactory` for one-transaction launches.
+- 27/27 tests, including a **live fork test against the real X Layer PoolManager**.
+- Standalone X Layer deploy scripts (HookMiner CREATE2), README.
 
 ## Phase 1 — Win the hackathon (now → submission)
 - Deploy to **X Layer mainnet** (OKB gas) → publish the verifiable contract address.
@@ -16,9 +17,8 @@
 - Judge-delight stretch: a one-page launch UI (configure → launch → live fee/graduation/anti-dump status) + the sniper-bot demo script.
 
 ## Phase 2 — From hook to product (≈ weeks 1–6 after)
-- **Close the honest gaps:** per-wallet caps via a trusted Liftoff router that passes the end-user in `hookData` (tx.origin fallback); graded sell limits as a % of reserves; exact-output handling.
+- **Done ✅:** per-wallet caps via the trusted `LiftoffRouter` (tx.origin fallback); graded sell limits as a % of reserves; exact-output-correct enforcement; one-tx `LaunchFactory`.
 - **Fee routing:** split swap fees to creator + protocol treasury, settled in **OKB** (optional x402 flow).
-- **LaunchFactory:** one transaction to "deploy token + create dynamic-fee pool + configure + seed locked LP," so a non-developer can launch.
 - **`liftoff-sdk`** (TypeScript) + a hosted launch dApp.
 - **Security:** invariant + fuzz tests, then a **third-party audit** before any real TVL. (Non-negotiable before real money — the current build is hackathon-grade.)
 
@@ -40,7 +40,7 @@ The fairness rail for token markets: every fair launch routes through Liftoff; a
 
 ## Honest risks & dependencies
 - **Audit gate:** today's hook is contest-grade; a real launchpad handling user funds needs an audit first.
-- **Per-wallet enforcement** is the key technical gap (v4 sees the router as `msg.sender`); Phase 2 router solves it.
+- **Per-wallet enforcement** relies on the trusted `LiftoffRouter` to carry the user in `hookData`; the `tx.origin` fallback for other routers is best-effort (spoofable by a malicious router, breaks under account abstraction).
 - **Partnership/adoption** (flap, OKX) cannot be assumed — it must be earned.
 - **Regulatory:** launchpads + transfer covenants touch securities-adjacent territory; jurisdictional care required.
 - **Ecosystem maturity:** v4 liquidity on X Layer is still early — upside, but not yet deep.

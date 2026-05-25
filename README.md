@@ -2,10 +2,10 @@
 
 Liftoff turns a Uniswap v4 pool into a complete token-launch venue. A token launches **as** a v4 pool — no separate bonding-curve contract, no migration step — and a single hook governs its whole lifecycle:
 
-1. **Anti-snipe** — a time-decaying launch fee on buys (via v4 dynamic fees) plus a per-tx buy cap during the opening window, so bots can't snipe block one.
+1. **Anti-snipe** — a time-decaying launch fee on buys (via v4 dynamic fees) plus per-tx and per-wallet buy caps during the opening window, so bots can't snipe block one.
 2. **Rug protection** — liquidity removal is locked until a configurable timestamp.
 3. **Graduation** — once cumulative volume (or the launch window) is reached, the pool flips to its baseline fee automatically.
-4. **Anti-dump (the "fair life")** — after graduation, sells are capped per tx to prevent cliff dumps.
+4. **Anti-dump (the "fair life")** — after graduation, sells are capped per tx, per wallet, and as a % of pool reserves to prevent cliff dumps.
 
 Built for the OKX **Build X "Hook the Future"** hackathon. Deployed against the **official Uniswap v4 PoolManager on X Layer mainnet** (`0x360E68faCcca8cA495c1B759Fd9EEe466db9FB32`).
 
@@ -17,7 +17,7 @@ Launchpads on X Layer (e.g. flap.sh) today run a bonding-curve contract *in fron
 
 - **Innovation** — Liftoff isn't a port of an existing protocol; it builds a new launch market structure on the v4 curve. Most launch hooks stop at a fair *launch*; Liftoff adds a post-graduation **anti-dump covenant** — fairness across the token's whole life, enforced at the swap layer (something a plain ERC-20 can't do). The full lifecycle (fee decay, graduation, cap lifting) runs autonomously on-chain with no operator.
 - **Market Potential** — every memecoin/creator launch needs anti-snipe + anti-rug + anti-dump; Liftoff serves X Layer's launchpad ecosystem (e.g. flap.sh) as an adoptable v4-native launch mode, growing v4 pools, liquidity, users, and OKB gas.
-- **Completion** — 22/22 Foundry tests, including a **live fork test against the real X Layer v4 PoolManager** and a narrated end-to-end lifecycle; the deploy script triggers real on-chain swaps judges can inspect on OKLink.
+- **Completion** — 27/27 Foundry tests, including a **live fork test against the real X Layer v4 PoolManager** and a narrated end-to-end lifecycle; the deploy script triggers real on-chain swaps judges can inspect on OKLink.
 
 ## Architecture
 
@@ -25,23 +25,25 @@ Launchpads on X Layer (e.g. flap.sh) today run a bonding-curve contract *in fron
 
 - `configureLaunch(PoolKey, LaunchConfig)` — set the launch terms (called once, before pool init; pool must be a dynamic-fee pool).
 - `_beforeInitialize` — requires the launch is configured and the pool is dynamic-fee; stamps the launch start.
-- `_beforeSwap` — applies the decaying launch fee on buys (returns a fee with `LPFeeLibrary.OVERRIDE_FEE_FLAG`), enforces the pre-graduation buy cap and the post-graduation sell cap.
-- `_afterSwap` — accumulates quote volume and graduates the pool when the threshold or window is met.
+- `_beforeSwap` — sets the dynamic fee only: the decaying launch fee on buys, then the baseline fee after graduation (returns it with `LPFeeLibrary.OVERRIDE_FEE_FLAG`).
+- `_afterSwap` — enforces buy/sell caps on the realized `BalanceDelta` (so they hold for exact-input and exact-output), accumulates quote volume, and graduates the pool when the threshold or window is met.
 - `_beforeRemoveLiquidity` — blocks liquidity removal until `lpLockUntil`.
+
+`LiftoffRouter` (`src/LiftoffRouter.sol`) is a thin swap router that forwards the end user's address in `hookData`. When a swap arrives through it, the hook reads the real user for per-wallet caps; otherwise it falls back to `tx.origin` (best-effort).
 
 ```
 LaunchConfig {
   bool   tokenIsCurrency0;   uint24 startFee; uint24 endFee; uint24 baselineFee;  // fees in pips (1e6 = 100%)
-  uint64 launchWindow;       uint256 maxBuyPerTx;  uint256 graduationVolume;
-  uint64 lpLockUntil;        uint256 maxSellPerTx;
+  uint64 launchWindow;       uint256 maxBuyPerTx;   uint256 maxBuyPerWallet;   uint256 graduationVolume;
+  uint64 lpLockUntil;        uint256 maxSellPerTx;  uint256 maxSellPerWallet;   uint16 maxSellBpsOfReserve;
 }
 ```
 
 ## Test
 
 ```bash
-forge test                                   # full suite (22 tests)
-forge test --match-contract LiftoffTest      # unit tests (10)
+forge test                                   # full suite (27 tests)
+forge test --match-contract LiftoffTest      # unit tests (15)
 forge test --match-contract LiftoffForkTest  # live fork vs X Layer PoolManager
 ```
 
@@ -70,6 +72,6 @@ Both mine a CREATE2 salt so the hook address carries the right permission bits (
 
 ## Honest scope notes
 
-- Buy/sell caps are **per-transaction**, not per-wallet — v4 sees the swap router as `msg.sender`, so true per-wallet limits need `tx.origin` or routing through a trusted router that passes the end-user in `hookData` (documented as future work). Per-tx caps still stop atomic single-tx snipes and dumps.
-- Cap checks use `|amountSpecified|` (exact-input is the common path); exact-output sizing is approximate.
+- Per-wallet caps need the end user's address, but v4 passes the *router* as the swap `sender`. Liftoff reads the real user from `hookData` when the swap comes through the trusted `LiftoffRouter`, and falls back to `tx.origin` otherwise. The `tx.origin` path is best-effort — spoofable by a malicious router and unreliable under account abstraction — so the trusted router is the dependable path; per-tx, per-reserve, and time/fee defenses still apply regardless of how the swap is routed.
+- Cap checks run in `_afterSwap` on the realized `BalanceDelta`, so they are exact for both exact-input and exact-output swaps.
 - The hook gives launch terms a lot of power over a pool; pools should be created by the launcher with terms users can read on-chain via `configs(poolId)`.
