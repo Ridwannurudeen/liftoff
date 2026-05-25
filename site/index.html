@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Liftoff — fair-launch + fair-life Uniswap v4 hook on X Layer</title>
+  <meta name="description" content="Liftoff turns a Uniswap v4 pool into a complete token-launch venue on X Layer: anti-snipe, locked liquidity, automatic graduation, and post-launch anti-dump — all in one hook." />
+  <meta property="og:title" content="Liftoff — fair-launch + fair-life Uniswap v4 hook" />
+  <meta property="og:description" content="A token launches as a v4 pool on X Layer. Anti-snipe, rug protection, graduation, anti-dump — one hook, one pool." />
+  <meta property="og:type" content="website" />
+  <link rel="preconnect" href="https://rpc.xlayer.tech" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="stars" aria-hidden="true"></div>
+
+  <header class="nav">
+    <a class="brand" href="#top">
+      <span class="brand-mark">▲</span> Liftoff
+    </a>
+    <nav class="nav-links">
+      <a href="#how">How it works</a>
+      <a href="#lifecycle">Lifecycle</a>
+      <a href="#live">Live</a>
+      <a href="#contracts">Contracts</a>
+      <a class="nav-cta" href="https://github.com/Ridwannurudeen/liftoff" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <p class="eyebrow">OKX Build X · Hook the Future · Uniswap v4 on X Layer</p>
+      <h1>A token launches <span class="grad">as</span> a Uniswap&nbsp;v4 pool.</h1>
+      <p class="sub">Liftoff is a single v4 hook that governs a token's whole life — anti-snipe at launch, locked liquidity, automatic graduation, and a post-launch anti-dump covenant. No separate bonding curve. No migration.</p>
+      <div class="hero-cta">
+        <a class="btn primary" href="#live">See it live on mainnet</a>
+        <a class="btn ghost" href="https://www.oklink.com/xlayer/address/0xA03D3d9043324955a4ea2a1bE77352851611E2C0" target="_blank" rel="noopener">View hook on OKLink ↗</a>
+      </div>
+      <div class="hero-badges">
+        <span class="badge">Official Uniswap v4 PoolManager</span>
+        <span class="badge">X Layer mainnet · chain 196</span>
+        <span class="badge">27/27 tests · live fork-tested</span>
+      </div>
+    </section>
+
+    <section id="how" class="how">
+      <h2>One hook. The whole lifecycle.</h2>
+      <div class="cards">
+        <article class="card">
+          <div class="card-num">01</div>
+          <h3>Anti-snipe</h3>
+          <p>A launch fee starts high and decays over the opening window (v4 dynamic fees), plus per-tx and per-wallet buy caps. Snipers pay; real buyers don't.</p>
+        </article>
+        <article class="card">
+          <div class="card-num">02</div>
+          <h3>Rug protection</h3>
+          <p>Liquidity removal is locked until a configurable timestamp, enforced in <code>beforeRemoveLiquidity</code>. No quiet LP pull.</p>
+        </article>
+        <article class="card">
+          <div class="card-num">03</div>
+          <h3>Graduation</h3>
+          <p>Once cumulative volume or the launch window is reached, the pool auto-flips to its baseline fee — no operator, no migration step.</p>
+        </article>
+        <article class="card">
+          <div class="card-num">04</div>
+          <h3>Anti-dump · "fair life"</h3>
+          <p>After graduation, sells are capped per tx, per wallet, and as a % of reserves — a covenant a plain ERC-20 can't enforce.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="lifecycle" class="lifecycle">
+      <h2>The launch, start to finish</h2>
+      <p class="section-sub">Exactly what runs on-chain — and what's proven in the <code>LiftoffDemo</code> test.</p>
+      <ol class="timeline">
+        <li><span class="t-fee">80%</span> launch fee at block one — the anti-snipe tax is at its peak.</li>
+        <li><span class="t-block">Blocked</span> a sniper tries a 5e18 buy over the 1e18 cap — reverted.</li>
+        <li><span class="t-decay">↓</span> the fee decays with time toward the baseline as the window elapses.</li>
+        <li><span class="t-grad">Graduated</span> cumulative volume crosses the threshold — the pool flips to its baseline fee.</li>
+        <li><span class="t-block">Blocked</span> a whale dump (5e18 over the 5e17 sell cap) is rejected post-graduation.</li>
+        <li><span class="t-ok">OK</span> a normal-sized sell goes through. Fair to buy, safe to hold, hard to dump.</li>
+      </ol>
+    </section>
+
+    <section id="live" class="live">
+      <div class="live-head">
+        <h2>Live from X Layer mainnet</h2>
+        <span class="live-dot" id="liveDot" title="reading the chain">●</span>
+      </div>
+      <p class="section-sub">Read straight from the deployed <strong>LIFT</strong> demo pool — no wallet, no backend. The deploy ran the full lifecycle on-chain, so this is real state from the official Uniswap v4 PoolManager.</p>
+      <div class="stats" id="stats">
+        <div class="stat">
+          <div class="stat-label">Pool status</div>
+          <div class="stat-value" id="statGraduated">…</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Current buy fee</div>
+          <div class="stat-value" id="statFee">…</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Cumulative volume</div>
+          <div class="stat-value" id="statVolume">…</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Launched</div>
+          <div class="stat-value" id="statLaunched">…</div>
+        </div>
+      </div>
+      <p class="live-note" id="liveNote">Querying <code>states()</code> and <code>currentBuyFee()</code> on the hook…</p>
+    </section>
+
+    <section class="why">
+      <h2>Why it matters</h2>
+      <p>Launchpads on X Layer today run a bonding-curve contract <em>in front of</em> an AMM, then migrate the token into a frozen pool — two systems, a migration risk, and no anti-snipe. Liftoff collapses all of that into one hook on one v4 pool. It's a primitive a launchpad like <strong>flap.sh</strong> can adopt directly — growing v4 pools, liquidity, real users, and OKB gas on X Layer.</p>
+    </section>
+
+    <section id="contracts" class="contracts">
+      <h2>Deployed on X Layer mainnet</h2>
+      <p class="section-sub">Chain 196, against the official Uniswap v4 PoolManager. Bytecode-verified on-chain.</p>
+      <div class="contract-table">
+        <a class="contract-row" href="https://www.oklink.com/xlayer/address/0xA03D3d9043324955a4ea2a1bE77352851611E2C0" target="_blank" rel="noopener">
+          <span class="c-name">Liftoff hook</span><span class="c-addr">0xA03D3d9043324955a4ea2a1bE77352851611E2C0</span><span class="c-go">↗</span>
+        </a>
+        <a class="contract-row" href="https://www.oklink.com/xlayer/address/0x834bad8990a4a363A4468723fe74f2468f6aECE1" target="_blank" rel="noopener">
+          <span class="c-name">LiftoffRouter</span><span class="c-addr">0x834bad8990a4a363A4468723fe74f2468f6aECE1</span><span class="c-go">↗</span>
+        </a>
+        <a class="contract-row" href="https://www.oklink.com/xlayer/address/0x52bFAB995e1f6e8C875Be9d95aBa29bc15f756D5" target="_blank" rel="noopener">
+          <span class="c-name">LaunchFactory</span><span class="c-addr">0x52bFAB995e1f6e8C875Be9d95aBa29bc15f756D5</span><span class="c-go">↗</span>
+        </a>
+        <a class="contract-row" href="https://www.oklink.com/xlayer/address/0x8b6cd1Dec298C0B9d6aF59f01dC501DB90b75AbE" target="_blank" rel="noopener">
+          <span class="c-name">LIFT demo token</span><span class="c-addr">0x8b6cd1Dec298C0B9d6aF59f01dC501DB90b75AbE</span><span class="c-go">↗</span>
+        </a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="foot-brand"><span class="brand-mark">▲</span> Liftoff</div>
+    <p>Built for the OKX <strong>Build X — Hook the Future</strong> hackathon. Uniswap v4 · X Layer · flap.sh.</p>
+    <div class="foot-links">
+      <a href="https://github.com/Ridwannurudeen/liftoff" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://www.oklink.com/xlayer/address/0xA03D3d9043324955a4ea2a1bE77352851611E2C0" target="_blank" rel="noopener">OKLink</a>
+    </div>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

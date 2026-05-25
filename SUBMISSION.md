@@ -30,8 +30,9 @@ Launchpads on X Layer today run a bonding-curve contract in front of an AMM, the
 - **Demo token (LIFT):** `0x8b6cd1Dec298C0B9d6aF59f01dC501DB90b75AbE` — https://www.oklink.com/xlayer/address/0x8b6cd1Dec298C0B9d6aF59f01dC501DB90b75AbE
 - The deploy ran the full lifecycle on-chain (launch-fee buys → graduation by volume → baseline buy/sell), so Hook behavior is triggered by real transactions and inspectable on OKLink. All deploy/lifecycle tx hashes are in `broadcast/DeployMainnetStack.s.sol/196/run-latest.json`.
 
-**Links (fill in):**
-- GitHub (public): `[ADD REPO URL]`
+**Links:**
+- Live site: https://liftoff.gudman.xyz (reads the deployed hook's state live from X Layer)
+- GitHub: https://github.com/Ridwannurudeen/liftoff
 - Demo video (2–5 min): `[ADD YOUTUBE/LOOM URL]`
 
 **Required social post:** see `X_POST.md` (tags @XLayerOfficial @Uniswap @flapdotsh).

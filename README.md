@@ -9,6 +9,8 @@ Liftoff turns a Uniswap v4 pool into a complete token-launch venue. A token laun
 
 Built for the OKX **Build X "Hook the Future"** hackathon. Deployed against the **official Uniswap v4 PoolManager on X Layer mainnet** (`0x360E68faCcca8cA495c1B759Fd9EEe466db9FB32`).
 
+**Live:** https://liftoff.gudman.xyz — reads the deployed hook's real pool state straight from X Layer (no wallet, no backend). Site source in [`site/`](site/).
+
 ## Why it matters
 
 Launchpads on X Layer (e.g. flap.sh) today run a bonding-curve contract *in front of* an AMM, then migrate the token into a frozen pool — two systems, a migration risk, and no anti-snipe. Liftoff collapses all of that into one hook on one v4 pool: the launch curve, anti-snipe window, rug lock, graduation, and post-launch anti-dump are native pool behavior. It's a primitive a launchpad can adopt directly.
