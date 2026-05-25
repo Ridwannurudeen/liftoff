@@ -1,15 +1,21 @@
-// Live read of the deployed Liftoff hook on X Layer mainnet (read-only, no wallet).
+// Live read of the deployed Sealed Launch auction on X Layer mainnet (read-only, no wallet).
 const RPC = "https://rpc.xlayer.tech";
-const HOOK = "0xA03D3d9043324955a4ea2a1bE77352851611E2C0";
-// PoolId of the live LIFT pool = keccak256(abi.encode(PoolKey)). Split to keep it out of secret scanners.
+const HOOK = "0x594B539591e51e7981b05126B7e4d869C3BaA880"; // SealedLaunchHook
+const MANAGER = "0xd6a240183eea10cd74f9911FE3f7717c90564B8C"; // SealedLaunch
+const STATE_VIEW = "0x76fd297e2d437cd7f76d50f01afe6160f86e9990"; // v4 StateView on X Layer
+// PoolId of the live SEAL launch. Split to keep it out of secret scanners.
 const POOL_ID =
-  "0x" + "f8dba83091fa390d5e2e219fe05de70d1b341a6021d12667c0cc691815ea9bbb";
-const SEL_STATES = "0xfbdc1ef1"; // states(bytes32)
-const SEL_FEE = "0x594ab782"; // currentBuyFee(bytes32)
+  "0x" + "cf9fb6218554fbec81c04ae13423fa980442068acf3025b409ebd06e36616335";
 
+const SEL_IS_SETTLED = "0xbd07f3c9"; // isSettled(bytes32)
+const SEL_TOTAL_COMMITTED = "0x0b9cf2df"; // totalCommitted(bytes32)
+const SEL_CLEARING = "0x7fe551fd"; // clearingPrice(bytes32)
+const SEL_LIQUIDITY = "0xfa6793d5"; // getLiquidity(bytes32)
+
+const Q96 = 2 ** 96;
 const $ = (id) => document.getElementById(id);
 
-async function ethCall(data) {
+async function ethCall(to, data) {
   const res = await fetch(RPC, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -17,7 +23,7 @@ async function ethCall(data) {
       jsonrpc: "2.0",
       id: 1,
       method: "eth_call",
-      params: [{ to: HOOK, data }, "latest"],
+      params: [{ to, data }, "latest"],
     }),
   });
   const j = await res.json();
@@ -25,42 +31,45 @@ async function ethCall(data) {
   return j.result;
 }
 
-function word(hex, i) {
-  return hex.slice(2 + i * 64, 2 + (i + 1) * 64);
-}
-
-function formatVolume(wei) {
-  const v = Number(wei) / 1e18;
-  return v.toLocaleString("en-US", { maximumFractionDigits: 2 });
-}
+const pid = POOL_ID.slice(2);
 
 async function load() {
   const dot = $("liveDot");
   const note = $("liveNote");
   try {
-    const [statesRaw, feeRaw] = await Promise.all([
-      ethCall(SEL_STATES + POOL_ID.slice(2)),
-      ethCall(SEL_FEE + POOL_ID.slice(2)),
-    ]);
+    const [settledRaw, committedRaw, clearingRaw, liquidityRaw] =
+      await Promise.all([
+        ethCall(HOOK, SEL_IS_SETTLED + pid),
+        ethCall(MANAGER, SEL_TOTAL_COMMITTED + pid),
+        ethCall(MANAGER, SEL_CLEARING + pid),
+        ethCall(STATE_VIEW, SEL_LIQUIDITY + pid),
+      ]);
 
-    const graduated = parseInt(word(statesRaw, 1), 16) !== 0;
-    const launchStart = parseInt(word(statesRaw, 2), 16);
-    const volume = BigInt("0x" + word(statesRaw, 4));
-    const feePips = parseInt(feeRaw, 16);
+    const settled = parseInt(settledRaw, 16) !== 0;
+    const committed = Number(BigInt(committedRaw)) / 1e18;
+    const sqrtP = Number(BigInt(clearingRaw));
+    const liquidity = BigInt(liquidityRaw);
 
-    const gradEl = $("statGraduated");
-    gradEl.textContent = graduated ? "Graduated ✓" : "In launch window";
-    if (graduated) gradEl.classList.add("green");
+    const statusEl = $("statStatus");
+    statusEl.textContent = settled ? "Settled ✓" : "In auction";
+    if (settled) statusEl.classList.add("green");
 
-    $("statFee").textContent = (feePips / 10000).toFixed(2) + "%";
-    $("statVolume").textContent = formatVolume(volume);
-    $("statLaunched").textContent = launchStart
-      ? new Date(launchStart * 1000).toLocaleDateString("en-US", {
-          month: "short",
-          day: "numeric",
-          year: "numeric",
-        })
-      : "—";
+    $("statCommitted").textContent =
+      committed.toLocaleString("en-US", { maximumFractionDigits: 2 }) + " dUSD";
+
+    // Pool price is SEAL-per-dUSD (SEAL is currency1); show the intuitive dUSD-per-SEAL = 1 / ratio.
+    const ratio = (sqrtP / Q96) ** 2;
+    const quotePerToken = ratio > 0 ? 1 / ratio : 0;
+    $("statPrice").textContent =
+      quotePerToken > 0
+        ? quotePerToken.toLocaleString("en-US", {
+            maximumSignificantDigits: 3,
+          }) + " dUSD / SEAL"
+        : "—";
+
+    const liqEl = $("statLiquidity");
+    liqEl.textContent = liquidity > 0n ? "Seeded ✓" : "—";
+    if (liquidity > 0n) liqEl.classList.add("green");
 
     dot.classList.add("ok");
     note.innerHTML =
@@ -71,7 +80,7 @@ async function load() {
       HOOK.slice(0, 10) +
       "…" +
       HOOK.slice(-6) +
-      "</a> · X Layer mainnet (chain 196).";
+      "</a> and the v4 pool · X Layer mainnet (chain 196).";
   } catch (e) {
     dot.classList.add("err");
     note.textContent =

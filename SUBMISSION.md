@@ -1,38 +1,43 @@
-# Liftoff — OKX "Hook the Future" submission
+# Sealed Launch — OKX "Hook the Future" submission
 
-> Fill the three bracketed placeholders after deploy + video, then submit via the Google Form. Do not submit without final review.
+> Fill the video URL after recording, then submit via the Google Form. Do not submit without final review.
 
-**Project name:** Liftoff
+**Project name:** Sealed Launch
 
-**One-liner:** A fair-launch + fair-life Uniswap v4 hook on X Layer — a token launches *as* a v4 pool, with anti-snipe, locked liquidity, automatic graduation, and post-launch anti-dump, all in one hook.
+**One-liner:** An order-independent fair-launch hook for Uniswap v4 on X Layer — a token launches through a sealed, uniform-price batch auction inside the hook, so being first (or paying to be first) buys no advantage.
 
 **What it does / problem it solves:**
-Launchpads on X Layer today run a bonding-curve contract in front of an AMM, then migrate the token into a frozen pool — two systems, a migration step, and no protection against snipers or post-launch dumps. Liftoff collapses the whole lifecycle into a single Uniswap v4 hook on one pool:
-1. **Anti-snipe** — a time-decaying launch fee on buys (v4 dynamic fees) + per-tx and per-wallet buy caps during the opening window.
-2. **Rug protection** — liquidity removal is locked until a configurable timestamp.
-3. **Graduation** — the pool auto-flips to its baseline fee once cumulative volume or the window is reached.
-4. **Anti-dump ("fair life")** — after graduation, sells are capped per tx, per wallet, and as a % of pool reserves to prevent cliff dumps — a covenant a normal ERC-20 can't enforce.
+Token launches get sniped on block one. Every existing defense (fee decay, Dutch auctions, fixed-price windows) still lets the fastest/best-connected actor in first. X Layer makes this worse and better at once: it migrated to the OP Stack with a **flashblocks** sequencer, and we verified on real mainnet blocks that transactions are **not** ordered by priority fee — ordering is unpredictable. So rather than fight ordering, Sealed Launch makes it **irrelevant**:
+1. During the launch window the hook **blocks all swaps** — nobody can trade the token before it clears.
+2. Buyers **commit** quote tokens. Commit order and block position don't matter.
+3. At window close, everyone **clears at one uniform price**, pro-rata: `allocation = offeredTokens · committed / totalCommitted`.
+4. Settlement **initializes the pool at the clearing price**, **seeds liquidity**, and opens normal trading. A missed `minRaise` refunds everyone.
+
+Fairness is a property of the mechanism, not a tunable parameter — provably un-snipeable.
 
 **Uniswap v4 / X Layer components used:**
-- Uniswap v4 hook (`BaseHook`) using dynamic fees (`LPFeeLibrary` override), `beforeInitialize/beforeSwap/afterSwap/beforeRemoveLiquidity`.
-- Deployed against the official Uniswap v4 **PoolManager on X Layer mainnet** `0x360E68faCcca8cA495c1B759Fd9EEe466db9FB32`.
-- `LaunchFactory` for one-transaction launches; HookMiner CREATE2 address mining.
-- `LiftoffRouter` forwards the end user in hookData so per-wallet caps are enforced reliably (tx.origin fallback otherwise); caps are checked in `afterSwap` on the realized `BalanceDelta`, so they hold for exact-input and exact-output swaps.
+- `SealedLaunchHook` (`BaseHook`, permissions `beforeInitialize | beforeAddLiquidity | beforeSwap`) gates the pool: swaps revert until settled; non-manager liquidity adds revert pre-settlement (no LP front-running).
+- `SealedLaunch` (`IUnlockCallback`) escrows commitments and, at settlement, initializes + seeds the pool via `poolManager.unlock` → `modifyLiquidity` at the clearing price.
+- Deployed against the official Uniswap v4 **PoolManager on X Layer mainnet** `0x360E68faCcca8cA495c1B759Fd9EEe466db9FB32`; hook address CREATE2-mined with `HookMiner`.
 
-**Why it matters (market):** Directly serves X Layer's launchpad ecosystem (e.g. flap.sh) — adoptable as a v4-native launch mode; grows v4 pools, OKB gas, and real users.
+**Why it matters (market):** Every token launch needs anti-snipe. Sealed Launch is directly adoptable by X Layer launchpads — **flap.sh** (a hackathon co-initiator) has no anti-snipe today — and grows v4 pools, liquidity, real users and OKB gas on a chain whose v4 TVL is still tiny.
 
-**Verification / completion:** 27/27 Foundry tests, including a **live fork test against the real X Layer PoolManager** and a narrated end-to-end lifecycle demo.
+**Verification / completion:** 50/50 Foundry tests, including a **live X Layer mainnet fork test**, plus a **real auction settled on mainnet**. The headline test proves a first-block buyer and a last-block buyer receive identical allocation and identical price per token.
 
-**Deployed on X Layer mainnet (chainId 196, against the official Uniswap v4 PoolManager):**
-- **Liftoff hook:** `0xA03D3d9043324955a4ea2a1bE77352851611E2C0` — https://www.oklink.com/xlayer/address/0xA03D3d9043324955a4ea2a1bE77352851611E2C0
-- **LiftoffRouter:** `0x834bad8990a4a363A4468723fe74f2468f6aECE1` — https://www.oklink.com/xlayer/address/0x834bad8990a4a363A4468723fe74f2468f6aECE1
-- **LaunchFactory:** `0x52bFAB995e1f6e8C875Be9d95aBa29bc15f756D5` — https://www.oklink.com/xlayer/address/0x52bFAB995e1f6e8C875Be9d95aBa29bc15f756D5
-- **Demo token (LIFT):** `0x8b6cd1Dec298C0B9d6aF59f01dC501DB90b75AbE` — https://www.oklink.com/xlayer/address/0x8b6cd1Dec298C0B9d6aF59f01dC501DB90b75AbE
-- The deploy ran the full lifecycle on-chain (launch-fee buys → graduation by volume → baseline buy/sell), so Hook behavior is triggered by real transactions and inspectable on OKLink. All deploy/lifecycle tx hashes are in `broadcast/DeployMainnetStack.s.sol/196/run-latest.json`.
+**Deployed + demonstrated on X Layer mainnet (chain 196, official Uniswap v4 PoolManager):**
+- **SealedLaunchHook:** `0x594B539591e51e7981b05126B7e4d869C3BaA880` — https://www.oklink.com/xlayer/address/0x594B539591e51e7981b05126B7e4d869C3BaA880
+- **SealedLaunch (manager):** `0xd6a240183eea10cd74f9911FE3f7717c90564B8C` — https://www.oklink.com/xlayer/address/0xd6a240183eea10cd74f9911FE3f7717c90564B8C
+- **SEAL (demo token):** `0x9A758af7A7EAB7B7F038caC7AA6127d232fC159B` — https://www.oklink.com/xlayer/address/0x9A758af7A7EAB7B7F038caC7AA6127d232fC159B
+- **dUSD (demo quote):** `0x8FfBcEdbD23B128b2652a2a2786515DdEF131182` — https://www.oklink.com/xlayer/address/0x8FfBcEdbD23B128b2652a2a2786515DdEF131182
+- A real launch ran end-to-end: open auction → commit → settle at the uniform clearing price → seed LP → live swap. Verified on-chain: `isSettled = true`, pool liquidity `> 0`. Tx provenance in `broadcast/DeploySealedLaunch.s.sol/196/` and `broadcast/SettleSealedLaunch.s.sol/196/`.
 
 **Links:**
-- Live site: https://liftoff.gudman.xyz (reads the deployed hook's state live from X Layer)
+- Live site: https://liftoff.gudman.xyz (reads the deployed auction's state live from X Layer)
 - GitHub: https://github.com/Ridwannurudeen/liftoff
-- Demo video (2–5 min): `[ADD YOUTUBE/LOOM URL]`
+- Demo video (1–3 min): `[ADD YOUTUBE/LOOM URL]`
 
 **Required social post:** see `X_POST.md` (tags @XLayerOfficial @Uniswap @flapdotsh).
+
+---
+
+*Predecessor: this repo began as **Liftoff** (a fair-launch + fair-life hook with time-decaying fee, LP lock, graduation, anti-dump caps), also deployed on X Layer mainnet (hook `0xA03D3d9043324955a4ea2a1bE77352851611E2C0`) and retained as the documented v1. Sealed Launch supersedes it with an order-independent mechanism suited to X Layer's flashblock sequencer.*

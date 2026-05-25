@@ -1,79 +1,92 @@
-# Liftoff — a fair-launch + fair-life Uniswap v4 hook on X Layer
+# Sealed Launch — an order-independent fair-launch hook for Uniswap v4 on X Layer
 
-Liftoff turns a Uniswap v4 pool into a complete token-launch venue. A token launches **as** a v4 pool — no separate bonding-curve contract, no migration step — and a single hook governs its whole lifecycle:
+**A token launches through a sealed, uniform-price batch auction running entirely inside a Uniswap v4 hook.** During the launch window the pool can't be swapped; buyers commit quote tokens; at window close everyone clears at **one uniform price**, pro-rata. Being first — or paying to be first — buys you *nothing*. Then the pool opens for normal trading, seeded with liquidity at the clearing price.
 
-1. **Anti-snipe** — a time-decaying launch fee on buys (via v4 dynamic fees) plus per-tx and per-wallet buy caps during the opening window, so bots can't snipe block one.
-2. **Rug protection** — liquidity removal is locked until a configurable timestamp.
-3. **Graduation** — once cumulative volume (or the launch window) is reached, the pool flips to its baseline fee automatically.
-4. **Anti-dump (the "fair life")** — after graduation, sells are capped per tx, per wallet, and as a % of pool reserves to prevent cliff dumps.
+Built for the OKX **Build X "Hook the Future"** hackathon, deployed against the **official Uniswap v4 PoolManager on X Layer mainnet** (`0x360E68faCcca8cA495c1B759Fd9EEe466db9FB32`).
 
-Built for the OKX **Build X "Hook the Future"** hackathon. Deployed against the **official Uniswap v4 PoolManager on X Layer mainnet** (`0x360E68faCcca8cA495c1B759Fd9EEe466db9FB32`).
+**Live:** https://liftoff.gudman.xyz — reads the deployed hook's real auction state straight from X Layer (no wallet, no backend).
 
-**Live:** https://liftoff.gudman.xyz — reads the deployed hook's real pool state straight from X Layer (no wallet, no backend). Site source in [`site/`](site/).
+## Why this, and why X Layer specifically
 
-## Why it matters
+In December 2025 X Layer migrated to the **OP Stack** and runs a **flashblocks** sequencer. We tested real mainnet blocks: transactions are **not** ordered by priority fee — block-level ordering is effectively unpredictable. That breaks the two fashionable anti-MEV designs:
 
-Launchpads on X Layer (e.g. flap.sh) today run a bonding-curve contract *in front of* an AMM, then migrate the token into a frozen pool — two systems, a migration risk, and no anti-snipe. Liftoff collapses all of that into one hook on one v4 pool: the launch curve, anti-snipe window, rug lock, graduation, and post-launch anti-dump are native pool behavior. It's a primitive a launchpad can adopt directly.
+- **Priority-fee "MEV-tax" hooks** (Angstrom-style) need descending-priority-fee ordering — which X Layer doesn't provide.
+- **Oracle / LVR-aware AMMs** need a price feed — and no general-purpose price oracle is confirmed live on X Layer.
+
+So instead of fighting ordering, **Sealed Launch makes ordering irrelevant.** A uniform-price batch auction is fair *by construction*: the clearing price and your allocation depend only on the ratio of your commitment to the total — never on which block, which position, or how much gas you paid. On a chain where you can't predict ordering, that's the only launch that is provably un-snipeable.
+
+Existing launch hooks (Flaunch, Doppler) compete on fee-decay and Dutch auctions; MEV-capture hooks (Angstrom) route value to LPs and aren't built for launches. A **sealed uniform-price batch auction as a v4 launch hook** is proposed in research but, to our knowledge, has not been shipped. flap.sh — a launchpad and a co-initiator of this hackathon — has no anti-snipe today; Sealed Launch is directly adoptable as its fair-launch mode.
 
 ## How it maps to the judging criteria
 
-- **Innovation** — Liftoff isn't a port of an existing protocol; it builds a new launch market structure on the v4 curve. Most launch hooks stop at a fair *launch*; Liftoff adds a post-graduation **anti-dump covenant** — fairness across the token's whole life, enforced at the swap layer (something a plain ERC-20 can't do). The full lifecycle (fee decay, graduation, cap lifting) runs autonomously on-chain with no operator.
-- **Market Potential** — every memecoin/creator launch needs anti-snipe + anti-rug + anti-dump; Liftoff serves X Layer's launchpad ecosystem (e.g. flap.sh) as an adoptable v4-native launch mode, growing v4 pools, liquidity, users, and OKB gas.
-- **Completion** — 27/27 Foundry tests, including a **live fork test against the real X Layer v4 PoolManager** and a narrated end-to-end lifecycle; the deploy script triggers real on-chain swaps judges can inspect on OKLink.
+- **Innovation** — order-independent, uniform-price sealed batch auction implemented as a v4 hook; fairness is a property of the mechanism, not a parameter. Verified white space.
+- **Market Potential** — every token launch needs anti-snipe; this is adoptable by X Layer's launchpads (flap.sh) and grows v4 pools, liquidity, real users and OKB gas on a chain whose v4 TVL is still tiny.
+- **Completion** — 50/50 Foundry tests (incl. a live X Layer mainnet fork) **and a real auction settled on mainnet**: deploy → commit → settle at one price → seed LP → trade. All inspectable on OKLink.
 
 ## Architecture
 
-`src/Liftoff.sol` is a single `BaseHook` with permissions `beforeInitialize | beforeSwap | afterSwap | beforeRemoveLiquidity`.
+Two contracts plus the launched token:
 
-- `configureLaunch(PoolKey, LaunchConfig)` — set the launch terms (called once, before pool init; pool must be a dynamic-fee pool).
-- `_beforeInitialize` — requires the launch is configured and the pool is dynamic-fee; stamps the launch start.
-- `_beforeSwap` — sets the dynamic fee only: the decaying launch fee on buys, then the baseline fee after graduation (returns it with `LPFeeLibrary.OVERRIDE_FEE_FLAG`).
-- `_afterSwap` — enforces buy/sell caps on the realized `BalanceDelta` (so they hold for exact-input and exact-output), accumulates quote volume, and graduates the pool when the threshold or window is met.
-- `_beforeRemoveLiquidity` — blocks liquidity removal until `lpLockUntil`.
-
-`LiftoffRouter` (`src/LiftoffRouter.sol`) is a thin swap router that forwards the end user's address in `hookData`. When a swap arrives through it, the hook reads the real user for per-wallet caps; otherwise it falls back to `tx.origin` (best-effort).
+- **`src/SealedLaunchHook.sol`** — the gating hook (`BaseHook`, permissions `beforeInitialize | beforeAddLiquidity | beforeSwap`). It holds no funds and runs no price math; it is purely the access-control gate around the pool:
+  - `_beforeSwap` reverts until the auction is `settled` — nobody trades the token before it clears.
+  - `_beforeAddLiquidity` reverts pre-settlement unless the caller is the launch manager — nobody front-runs the LP.
+  - `markSettled` (manager-only) opens the pool.
+- **`src/SealedLaunch.sol`** — factory + escrow + settlement (`IUnlockCallback`):
+  - `createLaunch` deploys the token, builds + configures the pool (not initialized yet — the pool is initialized *at* the clearing price), opens commitments.
+  - `commit(poolId, amount)` escrows quote. Order and block position are irrelevant.
+  - `settle(poolId)` computes the uniform clearing price `P = totalCommitted / offeredTokens`, initializes the pool at `P`, seeds full-range liquidity through `poolManager.unlock` → `modifyLiquidity`, opens trading, and forwards the raise to the launcher. If `totalCommitted < minRaise` the launch fails and commitments are refundable.
+  - `claim(poolId)` sends each buyer `offeredTokens · committed / totalCommitted`; `refund` returns funds on a failed launch.
 
 ```
-LaunchConfig {
-  bool   tokenIsCurrency0;   uint24 startFee; uint24 endFee; uint24 baselineFee;  // fees in pips (1e6 = 100%)
-  uint64 launchWindow;       uint256 maxBuyPerTx;   uint256 maxBuyPerWallet;   uint256 graduationVolume;
-  uint64 lpLockUntil;        uint256 maxSellPerTx;  uint256 maxSellPerWallet;   uint16 maxSellBpsOfReserve;
+LaunchParams {
+  string name; string symbol; uint256 totalSupply;
+  uint256 offeredTokens;  // sold to bidders, distributed pro-rata at the clearing price
+  uint256 lpTokens;       // seeded into the pool at settlement
+  Currency quote; uint64 startTime; uint64 endTime;
+  uint256 minRaise;       // launch fails (refunds) if not met
+  uint256 maxCommitPerWallet; int24 tickSpacing;
 }
 ```
+
+## Deployed on X Layer mainnet (chain 196)
+
+| Contract | Address |
+|---|---|
+| SealedLaunchHook | `0x594B539591e51e7981b05126B7e4d869C3BaA880` |
+| SealedLaunch (manager) | `0xd6a240183eea10cd74f9911FE3f7717c90564B8C` |
+| SEAL (demo token) | `0x9A758af7A7EAB7B7F038caC7AA6127d232fC159B` |
+| dUSD (demo quote) | `0x8FfBcEdbD23B128b2652a2a2786515DdEF131182` |
+
+A real launch was run end-to-end on mainnet (commit → settle at uniform price → LP seeded → live swap). On-chain proof: `isSettled = true`, pool liquidity `> 0`. Tx provenance in `broadcast/DeploySealedLaunch.s.sol/196/` and `broadcast/SettleSealedLaunch.s.sol/196/`.
 
 ## Test
 
 ```bash
-forge test                                   # full suite (27 tests)
-forge test --match-contract LiftoffTest      # unit tests (15)
-forge test --match-contract LiftoffForkTest  # live fork vs X Layer PoolManager
+forge test                                       # full suite (50 tests)
+forge test --match-contract SealedLaunchTest     # the sealed batch auction (23)
 ```
+
+The headline test, `test_sniperFirstBlockSamePricePerTokenAsLastBlock`, proves a first-block "sniper" and a last-block buyer get **identical allocation and identical price per token**.
 
 ## Deploy to X Layer
 
-Hook only:
-
 ```bash
-forge script script/DeployLiftoff.s.sol:DeployLiftoff \
-  --rpc-url https://rpc.xlayer.tech --private-key $PRIVATE_KEY --broadcast
+# Phase 1 — deploy hook + manager, open a launch, commit
+PRIVATE_KEY=0x.. WINDOW=150 forge script script/DeploySealedLaunch.s.sol:DeploySealedLaunch \
+  --rpc-url https://rpc.xlayer.tech --broadcast
+# Phase 2 — after the window closes: settle at the uniform price, claim, trade
+PRIVATE_KEY=0x.. LAUNCH=0x.. POOL_ID=0x.. forge script script/SettleSealedLaunch.s.sol:SettleSealedLaunch \
+  --rpc-url https://rpc.xlayer.tech --broadcast
 ```
 
-Full lifecycle demo (deploys hook + `LaunchFactory`, launches a token, seeds liquidity, and runs launch buys → graduation → baseline buy/sell so judges can inspect real on-chain activity):
-
-```bash
-forge script script/DeployMainnetStack.s.sol:DeployMainnetStack \
-  --rpc-url https://rpc.xlayer.tech --private-key $PRIVATE_KEY --broadcast
-```
-
-Both mine a CREATE2 salt so the hook address carries the right permission bits (`HookMiner`) and deploy against the official X Layer v4 PoolManager. Gas is paid in **OKB**. Verify on OKLink: https://www.oklink.com/xlayer
-
-## X Layer
-
-- Mainnet chainId **196**, RPC `https://rpc.xlayer.tech`, gas token **OKB**, explorer https://www.oklink.com/xlayer
-- Uniswap v4 PoolManager (official): `0x360E68faCcca8cA495c1B759Fd9EEe466db9FB32`
+The hook address is CREATE2-mined (`HookMiner`) so its low bits carry the permission flags (`0x2880`). Gas is paid in **OKB**.
 
 ## Honest scope notes
 
-- Per-wallet caps need the end user's address, but v4 passes the *router* as the swap `sender`. Liftoff reads the real user from `hookData` when the swap comes through the trusted `LiftoffRouter`, and falls back to `tx.origin` otherwise. The `tx.origin` path is best-effort — spoofable by a malicious router and unreliable under account abstraction — so the trusted router is the dependable path; per-tx, per-reserve, and time/fee defenses still apply regardless of how the swap is routed.
-- Cap checks run in `_afterSwap` on the realized `BalanceDelta`, so they are exact for both exact-input and exact-output swaps.
-- The hook gives launch terms a lot of power over a pool; pools should be created by the launcher with terms users can read on-chain via `configs(poolId)`.
+- v1 is a **proportional uniform-price** batch (allocation = `offeredTokens · committed / totalCommitted`). It is order-independent and un-snipeable; a sealed-bid commit–reveal with per-bid limit prices is the natural hardening (documented, not yet built).
+- Commitments are open during the window (not encrypted); fairness comes from uniform clearing, not secrecy. Commit–reveal would add bid privacy.
+- Hackathon-grade: a third-party audit is required before real TVL.
+
+## v1 predecessor — Liftoff
+
+This repo began as **Liftoff**, a fair-launch + fair-life hook (time-decaying launch fee, LP lock, graduation, anti-dump caps). It is fully implemented, tested, and **also deployed on X Layer mainnet** (hook `0xA03D3d9043324955a4ea2a1bE77352851611E2C0`), and is retained as the documented predecessor — see [`docs/`](docs/) and `src/Liftoff.sol`. Sealed Launch supersedes it: fee-decay anti-snipe is commoditized (Flaunch/Doppler), whereas order-independent batch clearing is novel and uniquely suited to X Layer's flashblock sequencer.

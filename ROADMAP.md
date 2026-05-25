@@ -1,5 +1,7 @@
 # Liftoff — Roadmap
 
+> **Note:** the submission has since evolved into **Sealed Launch** — an order-independent, uniform-price sealed batch-auction launch hook (see [`README`](README.md)). Liftoff is retained as the documented v1 predecessor; the roadmap below captured its trajectory and the launch-fairness thesis that Sealed Launch now delivers at the mechanism level.
+
 **North star:** become the *fairness layer for token launches* — the default way a token comes to market on X Layer, then on any Uniswap v4 chain. Fair to buy (no snipes), safe to hold (no rug), hard to dump (no cliff) — all enforced natively in the pool, not bolted on.
 
 ---
