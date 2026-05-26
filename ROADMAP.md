@@ -9,7 +9,7 @@
 ## Phase 0 — Built ✅ (hackathon)
 - `SealedLaunchHook` (v4 `BaseHook`; permissions `beforeInitialize | beforeAddLiquidity | beforeSwap`) — gates the pool: swaps revert and non-manager liquidity adds revert until the auction settles, so nobody can trade or front-run liquidity before clearing.
 - `SealedLaunch` (`IUnlockCallback`) — escrows commitments; at window close clears at one uniform price (`allocation = offered · committed / totalCommitted`), then `poolManager.unlock → modifyLiquidity` seeds the pool at the clearing price and opens trading; a missed `minRaise` refunds everyone.
-- **50/50 Foundry tests**, incl. a **live X Layer mainnet fork test** and the headline order-independence proof (a first-block buyer and a last-block buyer receive identical allocation and identical price per token).
+- **62/62 Foundry tests**, incl. a **live X Layer mainnet fork test** and the headline order-independence proof (a first-block buyer and a last-block buyer receive identical allocation and identical price per token).
 - Standalone X Layer deploy + settle scripts (HookMiner CREATE2), live state site, README.
 
 ## Phase 1 — Win the hackathon (now → submission)
@@ -18,7 +18,7 @@
 - Stretch: a multi-committer demo (2+ wallets, one clearing price) to show pro-rata fairness directly on-chain.
 
 ## Phase 2 — From hook to product (≈ weeks 1–6)
-- **Commit-reveal sealed bids (v2):** today the auction is order-*independent* but commitment *amounts* are visible on-chain — add a hashed commit + reveal so bid sizes stay hidden until settlement (true sealed-bid).
+- **Commit-reveal sealed bids (v2)** — ✅ shipped in-tree (`src/CommitRevealLaunch.sol` + 12 tests). Hashed commit (`keccak256(amount, salt, bidder)`) with a masked deposit during the commit window, real amount + salt during the reveal window, overage refunded. Bid sizes stay hidden on-chain until reveal. Not deployed to mainnet yet (the live demo still runs v1); next step is a mainnet deploy + multi-bidder demo. Known "free option" trade-off (no-reveal forfeiture) is a future hardening.
 - **Auction variants:** recurring/scheduled launches, configurable window + `minRaise`, oversubscription / partial-fill refunds.
 - **Fee routing:** post-launch swap fees split to creator + protocol treasury, settled in **OKB** (optional x402 flow).
 - **`sealed-launch-sdk`** (TypeScript) + a hosted launch dApp (configure → auction → live clearing/allocation status).
@@ -44,7 +44,7 @@ The **fair-issuance rail** for token markets: every fair launch routes through a
 
 ## Honest risks & dependencies
 - **Audit gate:** today's hook is contest-grade; a launchpad handling user funds needs an audit first.
-- **"Sealed" today = order-independent, not hidden:** commitment amounts are on-chain until commit-reveal ships (Phase 2). Fairness currently comes from uniform pricing + no pre-settlement trading, not yet from concealed bids.
+- **"Sealed" today = order-independent, not hidden in v1:** v1 commitments are visible on-chain; v2 (`src/CommitRevealLaunch.sol`, shipped in-tree, not yet deployed) hides bid sizes via hashed commit + reveal. The live mainnet demo still runs v1, so the headline fairness claim today rests on uniform pricing + no pre-settlement trading.
 - **Partnership / adoption** (flap, OKX) must be earned, not assumed.
 - **Regulatory:** batch-auction token issuance is securities-adjacent; jurisdictional care required.
 - **Ecosystem maturity:** v4 liquidity on X Layer is still early — upside, but thin today.

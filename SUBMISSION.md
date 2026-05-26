@@ -22,7 +22,7 @@ Fairness is a property of the mechanism, not a tunable parameter — provably un
 
 **Why it matters (market):** Every token launch needs anti-snipe. Sealed Launch is directly adoptable by X Layer launchpads — **flap.sh** (a hackathon co-initiator) has no anti-snipe today — and grows v4 pools, liquidity, real users and OKB gas on a chain whose v4 TVL is still tiny.
 
-**Verification / completion:** 50/50 Foundry tests, including a **live X Layer mainnet fork test**, plus a **real auction settled on mainnet**. The headline test proves a first-block buyer and a last-block buyer receive identical allocation and identical price per token.
+**Verification / completion:** 62/62 Foundry tests, including a **live X Layer mainnet fork test**, plus a **real auction settled on mainnet**. The headline test proves a first-block buyer and a last-block buyer receive identical allocation and identical price per token. v2 commit-reveal (`src/CommitRevealLaunch.sol`, 12 dedicated tests) is shipped in-tree as the documented hardening path — bid sizes hidden via hashed commit + reveal — live demo still runs v1.
 
 **Deployed + demonstrated on X Layer mainnet (chain 196, official Uniswap v4 PoolManager):**
 - **SealedLaunchHook:** `0x594B539591e51e7981b05126B7e4d869C3BaA880` — https://www.oklink.com/xlayer/address/0x594B539591e51e7981b05126B7e4d869C3BaA880

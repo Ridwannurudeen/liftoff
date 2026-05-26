@@ -21,7 +21,7 @@ Existing launch hooks (Flaunch, Doppler) compete on fee-decay and Dutch auctions
 
 - **Innovation** — order-independent, uniform-price sealed batch auction implemented as a v4 hook; fairness is a property of the mechanism, not a parameter. Verified white space.
 - **Market Potential** — every token launch needs anti-snipe; this is adoptable by X Layer's launchpads (flap.sh) and grows v4 pools, liquidity, real users and OKB gas on a chain whose v4 TVL is still tiny.
-- **Completion** — 50/50 Foundry tests (incl. a live X Layer mainnet fork) **and a real auction settled on mainnet**: deploy → commit → settle at one price → seed LP → trade. All inspectable on OKLink.
+- **Completion** — 62/62 Foundry tests (incl. a live X Layer mainnet fork) **and a real auction settled on mainnet**: deploy → commit → settle at one price → seed LP → trade. All inspectable on OKLink.
 
 ## Architecture
 
@@ -62,8 +62,9 @@ A real launch was run end-to-end on mainnet (commit → settle at uniform price 
 ## Test
 
 ```bash
-forge test                                       # full suite (50 tests)
-forge test --match-contract SealedLaunchTest     # the sealed batch auction (23)
+forge test                                       # full suite (62 tests)
+forge test --match-contract SealedLaunchTest     # v1 sealed batch auction (23)
+forge test --match-contract CommitRevealLaunch   # v2 commit-reveal sealed-bid (12)
 ```
 
 The headline test, `test_sniperFirstBlockSamePricePerTokenAsLastBlock`, proves a first-block "sniper" and a last-block buyer get **identical allocation and identical price per token**.
@@ -81,10 +82,16 @@ PRIVATE_KEY=0x.. LAUNCH=0x.. POOL_ID=0x.. forge script script/SettleSealedLaunch
 
 The hook address is CREATE2-mined (`HookMiner`) so its low bits carry the permission flags (`0x2880`). Gas is paid in **OKB**.
 
+## v2 — Commit-Reveal sealed bids (shipped, not yet deployed)
+
+`src/CommitRevealLaunch.sol` extends v1 with a hashed commit + masked deposit: bidders post `keccak256(amount, salt, bidder)` and escrow an upper-bound deposit; they reveal the real amount during a reveal window, with the overage refunded. The same `SealedLaunchHook` gates the pool. Bid sizes stay hidden on-chain until reveal, so the auction is now order-*independent* **and** size-sealed. 12 dedicated tests cover seal/reveal correctness, pro-rata on revealed bids, failed-launch refunds, and pool seeding at the clearing price.
+
+Live mainnet demo still runs through v1 (`SealedLaunch`); v2 is in-tree as the documented hardening path (Phase 2 of [`ROADMAP.md`](ROADMAP.md)).
+
 ## Honest scope notes
 
-- v1 is a **proportional uniform-price** batch (allocation = `offeredTokens · committed / totalCommitted`). It is order-independent and un-snipeable; a sealed-bid commit–reveal with per-bid limit prices is the natural hardening (documented, not yet built).
-- Commitments are open during the window (not encrypted); fairness comes from uniform clearing, not secrecy. Commit–reveal would add bid privacy.
+- v1 (live) is a **proportional uniform-price** batch (allocation = `offeredTokens · committed / totalCommitted`). It is order-independent and un-snipeable; v2 (`CommitRevealLaunch`) adds hashed-commit bid privacy on top of the same gating hook.
+- v2 commit-reveal has a documented "free-option" trade-off: a committer can skip reveal if the clearing price turns unfavorable. Bond-burn / partial-forfeiture hardening is a future iteration.
 - Hackathon-grade: a third-party audit is required before real TVL.
 
 ## v1 predecessor — Liftoff
