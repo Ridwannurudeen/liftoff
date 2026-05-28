@@ -29,10 +29,7 @@ export const SEALED_LAUNCH_V1: Address =
 export const COMMIT_REVEAL_LAUNCH_V2: Address =
   "0xaeD6bd08CDBaD833312d6BCFd9F97954350F606e";
 
-/**
- * Default v0.1 mainnet preset — pass to `getContracts({ chainId: 196 })`
- * to fetch a ready-made record of all the addresses above.
- */
+/** Ready-made record of all the X Layer mainnet addresses above for v0.1 consumers. */
 export const X_LAYER_CONTRACTS = {
   chainId: X_LAYER_MAINNET_ID,
   poolManager: X_LAYER_POOL_MANAGER,

@@ -20,6 +20,7 @@ import {LaunchFactory} from "../src/LaunchFactory.sol";
 ///     --rpc-url https://testrpc.xlayer.tech/terigon --private-key $PRIVATE_KEY --broadcast
 contract DeployTestnetStack is Script {
     function run() external {
+        require(block.chainid == 1952, "wrong chain: expected X Layer testnet 1952");
         uint256 pk = vm.envUint("PRIVATE_KEY");
         address deployer = vm.addr(pk);
 

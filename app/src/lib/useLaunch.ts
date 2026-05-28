@@ -7,7 +7,7 @@ import {
   type Launch,
   type PoolId,
 } from "sealed-launch-sdk";
-import type { Address } from "viem";
+import type { Address, PublicClient } from "viem";
 import { usePublicClient } from "wagmi";
 
 /** Refetch the (launch, bid) tuple every 5s while the auction is live. */
@@ -23,6 +23,9 @@ export function useLaunch(args: {
     queryKey: ["launch", args.launch, args.poolId, args.user],
     enabled: Boolean(publicClient && args.launch && args.poolId),
     refetchInterval: 5_000,
+    // Refetch when the user switches tabs back so a commit/reveal that
+    // happened in another tab is reflected before they click again.
+    refetchOnWindowFocus: true,
     queryFn: async (): Promise<{ launch: Launch; bid: Bid | null }> => {
       if (!publicClient || !args.launch || !args.poolId) {
         throw new Error("missing args");
@@ -46,4 +49,24 @@ export function useLaunch(args: {
       return { launch, bid };
     },
   });
+}
+
+/**
+ * One-shot fetch of just the bid for `(launch, poolId, user)`. Used to
+ * defeat multi-tab desync: callers run this immediately before broadcasting
+ * a commit/reveal to confirm the on-chain state still matches what the UI
+ * is showing.
+ */
+export async function fetchBid(args: {
+  publicClient: PublicClient;
+  launch: Address;
+  poolId: PoolId;
+  user: Address;
+}): Promise<Bid> {
+  return (await args.publicClient.readContract({
+    address: args.launch,
+    abi: commitRevealLaunchAbi,
+    functionName: "getBid",
+    args: [args.poolId, args.user],
+  })) as Bid;
 }

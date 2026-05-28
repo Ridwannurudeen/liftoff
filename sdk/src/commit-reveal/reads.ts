@@ -1,7 +1,18 @@
-import type { Address, PublicClient } from "viem";
+import type { Address, Hex, PublicClient } from "viem";
 
 import { commitRevealLaunchAbi } from "../abi/commit-reveal.js";
 import type { Bid, Launch, PoolId } from "./types.js";
+
+const ZERO_BYTES32 = ("0x" + "0".repeat(64)) as Hex;
+
+/**
+ * `true` when the user has posted a commitment for this launch. Disambiguates
+ * "never committed" (struct is zero-initialized) from "committed and revealed
+ * `0`", which `getBid` alone can't tell apart.
+ */
+export function hasCommitted(b: Bid): boolean {
+  return b.commitment !== ZERO_BYTES32;
+}
 
 export interface ReadArgs {
   client: PublicClient;
@@ -15,24 +26,22 @@ export async function getLaunch({
   launch,
   poolId,
 }: ReadArgs): Promise<Launch> {
-  const raw = await client.readContract({
+  return client.readContract({
     address: launch,
     abi: commitRevealLaunchAbi,
     functionName: "getLaunch",
     args: [poolId],
   });
-  return raw as Launch;
 }
 
 export async function getBid(args: ReadArgs & { user: Address }): Promise<Bid> {
   const { client, launch, poolId, user } = args;
-  const raw = await client.readContract({
+  return client.readContract({
     address: launch,
     abi: commitRevealLaunchAbi,
     functionName: "getBid",
     args: [poolId, user],
   });
-  return raw as Bid;
 }
 
 export async function totalRevealed({

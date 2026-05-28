@@ -16,6 +16,7 @@ import {CommitRevealLaunch} from "../src/CommitRevealLaunch.sol";
 ///     --rpc-url https://rpc.xlayer.tech --broadcast
 contract RevealCommitRevealDemo is Script {
     function run() external {
+        require(block.chainid == 196, "wrong chain: expected X Layer mainnet 196");
         uint256 pkA = vm.envUint("PRIVATE_KEY");
         uint256 pkB = vm.envUint("BIDDER2_PRIVATE_KEY");
         CommitRevealLaunch launch = CommitRevealLaunch(vm.envAddress("LAUNCH"));

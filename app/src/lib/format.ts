@@ -24,6 +24,15 @@ export function fmtTimestamp(ts: bigint | undefined): string {
   return new Date(ms).toISOString().replace("T", " ").slice(0, 19) + " UTC";
 }
 
+/**
+ * Render a raw bigint as a plain decimal string for an `<input>`. Uses
+ * viem's `formatUnits` so the round-trip with `parseUnits(_, decimals)` is
+ * exact at the requested decimals count — no silent 18-dec truncation.
+ */
+export function fmtBigForInput(v: bigint, decimals = 18): string {
+  return formatUnits(v, decimals);
+}
+
 export function fmtCountdown(target: bigint, now: bigint): string {
   const remaining = Number(target - now);
   if (remaining <= 0) return "0s";

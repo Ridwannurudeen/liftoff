@@ -26,6 +26,8 @@ contract DeployCommitRevealDemo is Script {
     address constant XLAYER_POOL_MANAGER = 0x360E68faCcca8cA495c1B759Fd9EEe466db9FB32;
     address constant EXISTING_HOOK = 0x594B539591e51e7981b05126B7e4d869C3BaA880;
 
+    int24 constant DEMO_TICK_SPACING = 60;
+
     // Sealed bid sizes: bidders escrow masked > revealed, real amount stays hidden until reveal.
     uint256 constant MASKED_A = 1_000e18;
     uint256 constant MASKED_B = 500e18;
@@ -36,6 +38,7 @@ contract DeployCommitRevealDemo is Script {
     function _saltB() internal pure returns (bytes32) { return keccak256("v2-demo-saltB"); }
 
     function run() external {
+        require(block.chainid == 196, "wrong chain: expected X Layer mainnet 196");
         uint256 pkA = vm.envUint("PRIVATE_KEY");
         uint256 pkB = vm.envUint("BIDDER2_PRIVATE_KEY");
         SealedLaunchHook hook = SealedLaunchHook(EXISTING_HOOK);
@@ -100,7 +103,7 @@ contract DeployCommitRevealDemo is Script {
                 revealEnd: rEnd,
                 minRaise: 0,
                 maxMaskedPerWallet: 0,
-                tickSpacing: 60
+                tickSpacing: DEMO_TICK_SPACING
             })
         );
         key;

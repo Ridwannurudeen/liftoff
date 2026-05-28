@@ -3,10 +3,11 @@
 import { useMemo, useState } from "react";
 import {
   COMMIT_REVEAL_LAUNCH_V2,
+  SEALED_LAUNCH_V1,
   createLaunch,
   type LaunchParams,
 } from "sealed-launch-sdk";
-import { isAddress, parseUnits, type Address, type Hex } from "viem";
+import { erc20Abi, isAddress, parseUnits, type Address, type Hex } from "viem";
 import {
   useAccount,
   useChainId,
@@ -19,6 +20,17 @@ import { xLayer } from "@/lib/chain";
 import { walletErrorMessage } from "@/lib/walletNetwork";
 
 const DEFAULT_QUOTE: Address = "0x632bdC371EF86b9238dE795aEE2babABE3A5A277";
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as Address;
+
+// Mirror the `/app` allowlist. The form defaults to the curated v2 manager;
+// any override gets a loud warning so a phishing pre-fill can't quietly
+// redirect `createLaunch` at a hostile manager.
+const KNOWN_LAUNCHES: ReadonlySet<string> = new Set(
+  [COMMIT_REVEAL_LAUNCH_V2, SEALED_LAUNCH_V1].map((a) => a.toLowerCase()),
+);
+
+// Strict positive-integer regex — rejects "+1800", "01800", "1800.0", " 1800".
+const POSITIVE_INT_RE = /^[1-9][0-9]*$/;
 
 type Status =
   | { kind: "idle" }
@@ -58,6 +70,26 @@ export default function CreateLaunchPage() {
 
   const onWrongChain = Boolean(address) && chainId !== xLayer.id;
 
+  // Live preview of launcher-residual tokens. If totalSupply equals
+  // offered + lp, the launcher receives zero — surface that explicitly so
+  // the user notices before paying gas.
+  const launcherResidual = useMemo(() => {
+    try {
+      const total = parseUnits(totalSupplyStr || "0", 18);
+      const offered = parseUnits(offeredStr || "0", 18);
+      const lp = parseUnits(lpStr || "0", 18);
+      if (total < offered + lp) return null;
+      return total - offered - lp;
+    } catch {
+      return null;
+    }
+  }, [totalSupplyStr, offeredStr, lpStr]);
+
+  // Detect overrides off the curated allowlist so the UI can warn loudly.
+  const trimmedLaunch = launchInput.trim();
+  const launchKnown =
+    isAddress(trimmedLaunch) && KNOWN_LAUNCHES.has(trimmedLaunch.toLowerCase());
+
   const canSubmit = useMemo(
     () =>
       Boolean(address) &&
@@ -84,7 +116,30 @@ export default function CreateLaunchPage() {
       if (!isAddress(quoteStrTrim)) {
         throw new Error("invalid quote token address");
       }
+      if (quoteStrTrim.toLowerCase() === ZERO_ADDRESS.toLowerCase()) {
+        throw new Error("quote token cannot be the zero address");
+      }
       const quote = quoteStrTrim as Address;
+
+      // Confirm the quote address is actually an ERC-20 before charging the
+      // user gas to deploy a token + open a pool that will never settle.
+      setStatus({ kind: "pending", msg: "Checking quote token…" });
+      try {
+        await publicClient.readContract({
+          address: quote,
+          abi: erc20Abi,
+          functionName: "symbol",
+        });
+        await publicClient.readContract({
+          address: quote,
+          abi: erc20Abi,
+          functionName: "decimals",
+        });
+      } catch {
+        throw new Error(
+          "Quote address doesn't look like an ERC-20 — check the address or use the demo dUSD2.",
+        );
+      }
 
       const totalSupply = parseUnits(totalSupplyStr || "0", 18);
       const offeredTokens = parseUnits(offeredStr || "0", 18);
@@ -99,10 +154,18 @@ export default function CreateLaunchPage() {
         throw new Error("total supply must be >= offered + lp");
       }
 
-      const commitWindow = BigInt(commitWindowStr || "0");
-      const revealWindow = BigInt(revealWindowStr || "0");
-      if (commitWindow <= 0n) throw new Error("commit window must be > 0");
-      if (revealWindow <= 0n) throw new Error("reveal window must be > 0");
+      if (!POSITIVE_INT_RE.test(commitWindowStr.trim())) {
+        throw new Error(
+          "commit window must be a positive integer (no leading zeros, no +/whitespace)",
+        );
+      }
+      if (!POSITIVE_INT_RE.test(revealWindowStr.trim())) {
+        throw new Error(
+          "reveal window must be a positive integer (no leading zeros, no +/whitespace)",
+        );
+      }
+      const commitWindow = BigInt(commitWindowStr.trim());
+      const revealWindow = BigInt(revealWindowStr.trim());
 
       const tickSpacing = Number(tickSpacingStr);
       if (!Number.isInteger(tickSpacing) || tickSpacing <= 0) {
@@ -217,6 +280,12 @@ export default function CreateLaunchPage() {
             value={lpStr}
             onChange={(e) => setLpStr(e.target.value)}
           />
+          {launcherResidual !== null && launcherResidual === 0n && (
+            <p className="notice warn" style={{ marginTop: 6 }}>
+              Launcher receives 0 tokens after settlement (totalSupply ==
+              offered + lp). Is this intentional?
+            </p>
+          )}
         </div>
         <div className="field">
           <label>
@@ -289,6 +358,14 @@ export default function CreateLaunchPage() {
             value={launchInput}
             onChange={(e) => setLaunchInput(e.target.value)}
           />
+          {!launchKnown && (
+            <p className="notice err" style={{ marginTop: 6 }}>
+              ⚠ This launch manager is not curated by Sealed Launch. Deploying
+              against an unverified manager can hand the deployer&apos;s funds
+              and the new token to a hostile contract. Reset to the default
+              unless you trust the address.
+            </p>
+          )}
         </div>
 
         <div className="actions">

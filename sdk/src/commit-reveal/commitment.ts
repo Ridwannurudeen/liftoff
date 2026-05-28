@@ -35,10 +35,12 @@ export function commitmentFor({ amount, salt, bidder }: CommitmentInput): Hex {
 
 /**
  * Convenience helper: turn a human-readable string into a deterministic
- * 32-byte salt via `keccak256(utf8(input))`. Useful for demos and tests; for
- * real bids generate random 32 bytes (e.g. `crypto.getRandomValues`) and
+ * 32-byte salt via `keccak256(utf8(NFC(input)))`. The input is normalized to
+ * Unicode NFC so visually-identical strings produced by different IMEs (or
+ * pasted from different sources) hash the same. Useful for demos and tests;
+ * for real bids generate random 32 bytes (e.g. `crypto.getRandomValues`) and
  * store the salt off-chain — losing it is equivalent to losing your bid.
  */
 export function deriveSalt(input: string): Hex {
-  return keccak256(stringToBytes(input));
+  return keccak256(stringToBytes(input.normalize("NFC")));
 }

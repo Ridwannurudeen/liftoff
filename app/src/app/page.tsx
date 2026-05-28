@@ -3,10 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   COMMIT_REVEAL_LAUNCH_V2,
+  SEALED_LAUNCH_V1,
   phaseOf,
   type PoolId,
 } from "sealed-launch-sdk";
-import { isAddress, isHex, type Address } from "viem";
+import { BaseError, isAddress, isHex, type Address } from "viem";
 import { useAccount } from "wagmi";
 
 import { ActionPanel } from "@/components/ActionPanel";
@@ -23,11 +24,26 @@ const DEMO_LAUNCH = COMMIT_REVEAL_LAUNCH_V2;
 const DEMO_POOL_ID = ("0x33bd0be4" +
   "4367cc00fb0c59e15ce1385e3160b6a9f07a1b39676256dd67686cca") as PoolId;
 
+// Curated, audited launch managers. Anything else is treated as untrusted —
+// the UI refuses to broadcast approvals/commits to an unknown manager until
+// the user explicitly opts in past a warning.
+const KNOWN_LAUNCHES: ReadonlySet<string> = new Set(
+  [COMMIT_REVEAL_LAUNCH_V2, SEALED_LAUNCH_V1].map((a) => a.toLowerCase()),
+);
+
+function isKnownLaunch(addr: Address | undefined): boolean {
+  return Boolean(addr && KNOWN_LAUNCHES.has(addr.toLowerCase()));
+}
+
 export default function Page() {
   const [launchAddr, setLaunchAddr] = useState<Address>(DEMO_LAUNCH);
   const [poolId, setPoolId] = useState<PoolId>(DEMO_POOL_ID);
   const [launchInput, setLaunchInput] = useState<string>(DEMO_LAUNCH);
   const [poolIdInput, setPoolIdInput] = useState<string>(DEMO_POOL_ID);
+  // True once the user has explicitly acknowledged that the current launch
+  // address is not on the curated allowlist. Reset whenever `launchAddr`
+  // changes.
+  const [unknownAck, setUnknownAck] = useState(false);
 
   // Hydrate from query params on mount so links like ?launch=…&poolId=… work.
   useEffect(() => {
@@ -39,11 +55,17 @@ export default function Page() {
       setLaunchAddr(l as Address);
       setLaunchInput(l);
     }
-    if (p && isHex(p) && p.length === 66) {
-      setPoolId(p as PoolId);
-      setPoolIdInput(p);
+    if (p && /^0x[0-9a-fA-F]{64}$/.test(p)) {
+      const lower = p.toLowerCase() as PoolId;
+      setPoolId(lower);
+      setPoolIdInput(lower);
     }
   }, []);
+
+  // Reset the ack any time we switch to a different launch address.
+  useEffect(() => {
+    setUnknownAck(false);
+  }, [launchAddr]);
 
   const { address } = useAccount();
   const { data, refetch, isLoading, error } = useLaunch({
@@ -69,11 +91,22 @@ export default function Page() {
     [data, now],
   );
 
+  const launchKnown = isKnownLaunch(launchAddr);
+  const trusted = launchKnown || unknownAck;
+
   const onLoad = () => {
     if (isAddress(launchInput)) setLaunchAddr(launchInput as Address);
     if (isHex(poolIdInput) && poolIdInput.length === 66)
-      setPoolId(poolIdInput as PoolId);
+      setPoolId(poolIdInput.toLowerCase() as PoolId);
   };
+
+  const sanitizedError = error
+    ? error instanceof BaseError
+      ? error.shortMessage
+      : error instanceof Error
+        ? error.message
+        : "unknown error"
+    : null;
 
   return (
     <main className="shell">
@@ -83,6 +116,48 @@ export default function Page() {
         </a>
         <ConnectButton />
       </header>
+
+      {!launchKnown && (
+        <div
+          className="notice err"
+          style={{ marginTop: 16, display: "grid", gap: 10 }}
+        >
+          <strong>
+            ⚠ Unverified launch manager — this contract is not curated by Sealed
+            Launch.
+          </strong>
+          <span>
+            The contract at <span className="mono">{launchAddr}</span> may be
+            malicious. A hostile launch manager can redirect your token approval
+            to a contract the attacker controls and drain the corresponding
+            token. Do not commit funds unless you trust the deployer.
+          </span>
+          {!unknownAck && (
+            <div className="actions">
+              <button className="btn ghost" onClick={() => setUnknownAck(true)}>
+                I understand this is an unverified contract
+              </button>
+              <button
+                className="btn"
+                onClick={() => {
+                  setLaunchInput(DEMO_LAUNCH);
+                  setPoolIdInput(DEMO_POOL_ID);
+                  setLaunchAddr(DEMO_LAUNCH);
+                  setPoolId(DEMO_POOL_ID);
+                }}
+              >
+                Reset to verified demo
+              </button>
+            </div>
+          )}
+          {unknownAck && (
+            <span className="muted">
+              Acknowledged. Actions are enabled — review every wallet prompt
+              carefully.
+            </span>
+          )}
+        </div>
+      )}
 
       <section className="hero">
         <h1>Drive a sealed batch-auction launch — live on X Layer mainnet</h1>
@@ -236,10 +311,15 @@ export default function Page() {
         </p>
       )}
       {error && (
-        <p className="notice err" style={{ marginTop: 20 }}>
-          Couldn&apos;t read this launch — check the address + poolId.{" "}
-          <span className="muted">{(error as Error).message}</span>
-        </p>
+        <div className="notice err" style={{ marginTop: 20 }}>
+          <p style={{ margin: 0 }}>
+            Could not load this launch — check the address and pool id.
+          </p>
+          <details style={{ marginTop: 6 }}>
+            <summary className="muted">technical detail</summary>
+            <span className="muted mono">{sanitizedError}</span>
+          </details>
+        </div>
       )}
 
       {data && phase && (
@@ -262,6 +342,7 @@ export default function Page() {
             refetch={() => {
               void refetch();
             }}
+            trusted={trusted}
           />
         </div>
       )}

@@ -35,11 +35,14 @@ contract DeployMainnetStack is Script {
 
     address constant XLAYER_POOL_MANAGER = 0x360E68faCcca8cA495c1B759Fd9EEe466db9FB32;
 
+    int24 constant DEMO_TICK_SPACING = 60;
+
     PoolSwapTest swapRouter;
     PoolKey key;
     bool tokenIsC0;
 
     function run() external {
+        require(block.chainid == 196, "wrong chain: expected X Layer mainnet 196");
         uint256 pk = vm.envUint("PRIVATE_KEY");
         address deployer = vm.addr(pk);
         IPoolManager pmgr = IPoolManager(XLAYER_POOL_MANAGER);
@@ -95,8 +98,8 @@ contract DeployMainnetStack is Script {
         lpRouter.modifyLiquidity(
             key,
             ModifyLiquidityParams({
-                tickLower: TickMath.minUsableTick(60),
-                tickUpper: TickMath.maxUsableTick(60),
+                tickLower: TickMath.minUsableTick(DEMO_TICK_SPACING),
+                tickUpper: TickMath.maxUsableTick(DEMO_TICK_SPACING),
                 liquidityDelta: int256(1e21),
                 salt: bytes32(0)
             }),

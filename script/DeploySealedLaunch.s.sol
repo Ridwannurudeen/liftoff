@@ -26,7 +26,10 @@ import {SealedLaunch} from "../src/SealedLaunch.sol";
 contract DeploySealedLaunch is Script {
     address constant XLAYER_POOL_MANAGER = 0x360E68faCcca8cA495c1B759Fd9EEe466db9FB32;
 
+    int24 constant DEMO_TICK_SPACING = 60;
+
     function run() external {
+        require(block.chainid == 196, "wrong chain: expected X Layer mainnet 196");
         uint256 pk = vm.envUint("PRIVATE_KEY");
         address deployer = vm.addr(pk);
         IPoolManager pmgr = IPoolManager(XLAYER_POOL_MANAGER);
@@ -62,7 +65,7 @@ contract DeploySealedLaunch is Script {
                 endTime: end,
                 minRaise: 0,
                 maxCommitPerWallet: 0,
-                tickSpacing: 60
+                tickSpacing: DEMO_TICK_SPACING
             })
         );
 

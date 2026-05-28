@@ -20,6 +20,8 @@ contract DeployLiftoff is Script {
     address constant XLAYER_POOL_MANAGER = 0x360E68faCcca8cA495c1B759Fd9EEe466db9FB32;
 
     function run() external {
+        require(block.chainid == 196, "wrong chain: expected X Layer mainnet 196");
+        uint256 pk = vm.envUint("PRIVATE_KEY");
         IPoolManager poolManager = IPoolManager(vm.envOr("POOL_MANAGER", XLAYER_POOL_MANAGER));
 
         // Must match Liftoff.getHookPermissions() exactly, or deployment reverts.
@@ -28,7 +30,7 @@ contract DeployLiftoff is Script {
                 | Hooks.BEFORE_REMOVE_LIQUIDITY_FLAG
         );
 
-        vm.startBroadcast();
+        vm.startBroadcast(pk);
         LiftoffRouter router = new LiftoffRouter(poolManager);
 
         bytes memory constructorArgs = abi.encode(poolManager, address(router));

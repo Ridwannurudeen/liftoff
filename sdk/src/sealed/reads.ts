@@ -15,13 +15,12 @@ export async function getLaunchV1({
   launch,
   poolId,
 }: ReadArgs): Promise<SealedLaunch> {
-  const raw = await client.readContract({
+  return client.readContract({
     address: launch,
     abi: sealedLaunchAbi,
     functionName: "getLaunch",
     args: [poolId],
   });
-  return raw as SealedLaunch;
 }
 
 export async function totalCommitted({

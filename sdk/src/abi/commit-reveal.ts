@@ -110,7 +110,7 @@ export const commitRevealLaunchAbi = [
   {
     type: "function",
     name: "LP_FEE",
-    stateMutability: "view",
+    stateMutability: "pure",
     inputs: [],
     outputs: [{ name: "", type: "uint24" }],
   },

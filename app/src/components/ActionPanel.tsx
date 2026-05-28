@@ -23,8 +23,9 @@ import {
 } from "wagmi";
 
 import { xLayer } from "@/lib/chain";
-import { fmtAmount, fmtCountdown } from "@/lib/format";
+import { fmtAmount, fmtBigForInput, fmtCountdown } from "@/lib/format";
 import { clearSalt, loadSalt, saveSalt } from "@/lib/saltStore";
+import { fetchBid } from "@/lib/useLaunch";
 import { walletErrorMessage } from "@/lib/walletNetwork";
 
 interface ActionPanelProps {
@@ -35,6 +36,12 @@ interface ActionPanelProps {
   launchAddr: Address;
   poolId: PoolId;
   refetch: () => void;
+  /**
+   * True when the launch manager is on the curated allowlist OR the user
+   * has explicitly acknowledged the risk of interacting with an unverified
+   * contract. When false, all action buttons are suppressed.
+   */
+  trusted: boolean;
 }
 
 type Status =
@@ -42,6 +49,32 @@ type Status =
   | { kind: "pending"; msg: string }
   | { kind: "error"; msg: string }
   | { kind: "ok"; msg: string; tx?: Hex };
+
+const SALT_RE = /^0x[0-9a-fA-F]{64}$/;
+const ZERO_BYTES32 = ("0x" + "0".repeat(64)) as Hex;
+
+/**
+ * Defensive wrapper around `loadSalt`. The on-disk cache lives in
+ * `localStorage` and is therefore writable by any same-origin script, so
+ * validate the shape before consuming it.
+ */
+function loadValidatedSalt(
+  launchAddr: Address,
+  poolId: PoolId,
+  bidder: Address,
+): { salt: Hex; amount: bigint } | null {
+  const cached = loadSalt(launchAddr, poolId, bidder);
+  if (!cached) return null;
+  if (typeof cached.salt !== "string" || !SALT_RE.test(cached.salt)) {
+    console.warn("loadSalt: dropping entry with malformed salt");
+    return null;
+  }
+  if (typeof cached.amount !== "bigint" || cached.amount < 0n) {
+    console.warn("loadSalt: dropping entry with malformed amount");
+    return null;
+  }
+  return cached;
+}
 
 function StatusLine({ status }: { status: Status }) {
   if (status.kind === "idle") return null;
@@ -77,6 +110,7 @@ export function ActionPanel({
   launchAddr,
   poolId,
   refetch,
+  trusted,
 }: ActionPanelProps) {
   const { address } = useAccount();
   const chainId = useChainId();
@@ -95,7 +129,6 @@ export function ActionPanel({
         }
       : null;
 
-  const ZERO_BYTES32 = ("0x" + "0".repeat(64)) as Hex;
   const hasCommit = bid !== null && bid.commitment !== ZERO_BYTES32;
   const didReveal = bid?.didReveal ?? false;
   const settledOut = bid?.settledOut ?? false;
@@ -121,6 +154,22 @@ export function ActionPanel({
     );
   }
 
+  // The page wraps an untrusted launch manager (off-allowlist + no user
+  // ack) in read-only mode. Render the card but suppress every write path
+  // so a phishing link can't trigger an ERC-20 approval against a hostile
+  // contract.
+  if (!trusted) {
+    return (
+      <div className="card">
+        <h2>Actions</h2>
+        <p className="muted">
+          Actions are disabled until you acknowledge this is an unverified
+          launch manager (see the warning at the top of the page).
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="card">
       <h2>Actions</h2>
@@ -139,6 +188,7 @@ export function ActionPanel({
           launchAddr={launchAddr}
           poolId={poolId}
           bidder={address}
+          status={status}
           setStatus={setStatus}
           refetch={refetch}
         />
@@ -156,6 +206,7 @@ export function ActionPanel({
           launchAddr={launchAddr}
           poolId={poolId}
           bidder={address}
+          status={status}
           setStatus={setStatus}
           refetch={refetch}
         />
@@ -176,6 +227,7 @@ export function ActionPanel({
         <SettleButton
           ctx={writeCtx}
           poolId={poolId}
+          status={status}
           setStatus={setStatus}
           refetch={refetch}
         />
@@ -189,6 +241,7 @@ export function ActionPanel({
           <ClaimButton
             ctx={writeCtx}
             poolId={poolId}
+            status={status}
             setStatus={setStatus}
             refetch={refetch}
           />
@@ -201,6 +254,7 @@ export function ActionPanel({
           <ReclaimButton
             ctx={writeCtx}
             poolId={poolId}
+            status={status}
             setStatus={setStatus}
             refetch={refetch}
             label="Reclaim masked deposit (you didn't reveal)"
@@ -217,6 +271,7 @@ export function ActionPanel({
         <ReclaimButton
           ctx={writeCtx}
           poolId={poolId}
+          status={status}
           setStatus={setStatus}
           refetch={refetch}
           label={didReveal ? "Reclaim revealed bid" : "Reclaim masked deposit"}
@@ -240,6 +295,7 @@ function useCtx() {
 
 interface FormCommonProps {
   ctx: WriteCtxT;
+  status: Status;
   setStatus: (s: Status) => void;
   refetch: () => void;
 }
@@ -250,6 +306,7 @@ function CommitForm({
   launchAddr,
   poolId,
   bidder,
+  status,
   setStatus,
   refetch,
 }: FormCommonProps & {
@@ -263,6 +320,8 @@ function CommitForm({
   const [saltStr, setSaltStr] = useState(
     `bid-${bidder.slice(2, 10)}-${Date.now()}`,
   );
+
+  const pending = status.kind === "pending";
 
   const onCommit = async () => {
     try {
@@ -281,6 +340,25 @@ function CommitForm({
 
       const salt = deriveSalt(saltStr);
       const commitment = commitmentFor({ amount, salt, bidder });
+
+      // Multi-tab desync defense: re-read the bid right before broadcast.
+      // If another tab already committed for this wallet, refuse instead
+      // of wasting gas on a sure-to-revert second commit.
+      setStatus({
+        kind: "pending",
+        msg: "Confirming you haven't committed in another tab…",
+      });
+      const liveBid = await fetchBid({
+        publicClient: ctx.public,
+        launch: launchAddr,
+        poolId,
+        user: bidder,
+      });
+      if (liveBid.commitment !== ZERO_BYTES32) {
+        throw new Error(
+          "You already committed in another tab — refresh to see your bid.",
+        );
+      }
 
       // Approve the quote token if needed.
       setStatus({ kind: "pending", msg: "Approving quote token…" });
@@ -339,8 +417,8 @@ function CommitForm({
         />
       </div>
       <div className="actions">
-        <button className="btn" onClick={onCommit}>
-          Approve &amp; commit
+        <button className="btn" onClick={onCommit} disabled={pending}>
+          {pending ? "Submitting…" : "Approve & commit"}
         </button>
       </div>
     </>
@@ -352,6 +430,7 @@ function RevealForm({
   launchAddr,
   poolId,
   bidder,
+  status,
   setStatus,
   refetch,
 }: FormCommonProps & {
@@ -359,18 +438,20 @@ function RevealForm({
   poolId: PoolId;
   bidder: Address;
 }) {
-  const cached = loadSalt(launchAddr, poolId, bidder);
+  const cached = loadValidatedSalt(launchAddr, poolId, bidder);
   const [amountStr, setAmountStr] = useState(
-    cached ? formatBigForInput(cached.amount) : "",
+    cached ? fmtBigForInput(cached.amount) : "",
   );
   const [saltHex, setSaltHex] = useState<Hex | "">(cached?.salt ?? "");
   const [saltPhrase, setSaltPhrase] = useState("");
+
+  const pending = status.kind === "pending";
 
   const onReveal = async () => {
     try {
       const amount = parseUnits(amountStr || "0", 18);
       const salt: Hex = saltHex || deriveSalt(saltPhrase);
-      if (!salt || !/^0x[0-9a-fA-F]{64}$/.test(salt)) {
+      if (!salt || !SALT_RE.test(salt)) {
         throw new Error("provide a 32-byte salt (or the original phrase)");
       }
 
@@ -415,8 +496,8 @@ function RevealForm({
         />
       </div>
       <div className="actions">
-        <button className="btn" onClick={onReveal}>
-          Reveal
+        <button className="btn" onClick={onReveal} disabled={pending}>
+          {pending ? "Submitting…" : "Reveal"}
         </button>
       </div>
     </>
@@ -426,9 +507,11 @@ function RevealForm({
 function SettleButton({
   ctx,
   poolId,
+  status,
   setStatus,
   refetch,
 }: FormCommonProps & { poolId: PoolId }) {
+  const pending = status.kind === "pending";
   const onSettle = async () => {
     try {
       setStatus({ kind: "pending", msg: "Settling auction…" });
@@ -442,8 +525,8 @@ function SettleButton({
   };
   return (
     <div className="actions">
-      <button className="btn" onClick={onSettle}>
-        Settle (anyone)
+      <button className="btn" onClick={onSettle} disabled={pending}>
+        {pending ? "Submitting…" : "Settle (anyone)"}
       </button>
     </div>
   );
@@ -452,9 +535,11 @@ function SettleButton({
 function ClaimButton({
   ctx,
   poolId,
+  status,
   setStatus,
   refetch,
 }: FormCommonProps & { poolId: PoolId }) {
+  const pending = status.kind === "pending";
   const onClaim = async () => {
     try {
       setStatus({ kind: "pending", msg: "Claiming allocation…" });
@@ -468,8 +553,8 @@ function ClaimButton({
   };
   return (
     <div className="actions">
-      <button className="btn" onClick={onClaim}>
-        Claim allocation
+      <button className="btn" onClick={onClaim} disabled={pending}>
+        {pending ? "Submitting…" : "Claim allocation"}
       </button>
     </div>
   );
@@ -479,9 +564,11 @@ function ReclaimButton({
   ctx,
   poolId,
   label,
+  status,
   setStatus,
   refetch,
 }: FormCommonProps & { poolId: PoolId; label: string }) {
+  const pending = status.kind === "pending";
   const onReclaim = async () => {
     try {
       setStatus({ kind: "pending", msg: "Reclaiming escrow…" });
@@ -495,8 +582,8 @@ function ReclaimButton({
   };
   return (
     <div className="actions">
-      <button className="btn" onClick={onReclaim}>
-        {label}
+      <button className="btn" onClick={onReclaim} disabled={pending}>
+        {pending ? "Submitting…" : label}
       </button>
     </div>
   );
@@ -504,11 +591,4 @@ function ReclaimButton({
 
 function errMsg(e: unknown): string {
   return walletErrorMessage(e);
-}
-
-function formatBigForInput(v: bigint): string {
-  // Render as a plain decimal string (18-decimals quote) for input prefill.
-  const s = (v / 10n ** 18n).toString();
-  const frac = (v % 10n ** 18n).toString().padStart(18, "0").replace(/0+$/, "");
-  return frac ? `${s}.${frac}` : s;
 }

@@ -29,6 +29,7 @@ contract SettleCommitRevealDemo is Script {
     using StateLibrary for IPoolManager;
 
     function run() external {
+        require(block.chainid == 196, "wrong chain: expected X Layer mainnet 196");
         uint256 pkA = vm.envUint("PRIVATE_KEY");
         uint256 pkB = vm.envUint("BIDDER2_PRIVATE_KEY");
         CommitRevealLaunch launch = CommitRevealLaunch(vm.envAddress("LAUNCH"));
@@ -38,7 +39,9 @@ contract SettleCommitRevealDemo is Script {
         vm.startBroadcast(pkA);
         launch.settle(id);
         launch.claim(id);
-        _demoSwap(launch, id);
+        if (!vm.envOr("SKIP_DEMO_SWAP", false)) {
+            _demoSwap(launch, id);
+        }
         vm.stopBroadcast();
 
         // Bidder B claims their pro-rata allocation.

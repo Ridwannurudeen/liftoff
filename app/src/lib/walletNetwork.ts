@@ -1,4 +1,8 @@
-import type { AddEthereumChainParameter, EIP1193Provider } from "viem";
+import {
+  BaseError,
+  type AddEthereumChainParameter,
+  type EIP1193Provider,
+} from "viem";
 
 import { X_LAYER_CHAIN_ID_HEX, X_LAYER_RPC_URL, xLayer } from "@/lib/chain";
 
@@ -13,9 +17,20 @@ const xLayerWalletParams = {
 const RABBY_RPC_FIX =
   "Rabby has a stale X Layer network saved. Edit or remove X Layer Mainnet in Rabby, then add it with chain ID 196 (0xc4), RPC https://rpc.xlayer.tech, symbol OKB. Do not use the testnet RPC https://testrpc.xlayer.tech/terigon for this app.";
 
-export async function ensureXLayerNetwork() {
-  const provider = getInjectedProvider();
-  if (!provider) throw new Error("No injected wallet found.");
+const GENERIC_CHAIN_MISMATCH_FIX =
+  "Your wallet's saved X Layer RPC is rejecting the chain ID. Open your wallet's network list, remove X Layer Mainnet, then re-add it with chain ID 196 (0xc4) and RPC https://rpc.xlayer.tech.";
+
+/**
+ * Route chain-switch / chain-add calls through the *connected* wallet provider
+ * rather than `window.ethereum`. In an EIP-6963 multi-wallet browser the
+ * global injected provider is whichever extension won the race — not
+ * necessarily the wallet wagmi connected to. Callers pass the provider they
+ * fetched off the wagmi connector via `connector.getProvider()`.
+ */
+export async function ensureXLayerNetwork(
+  provider: EIP1193Provider | undefined,
+) {
+  if (!provider) throw new Error("No connected wallet provider.");
 
   try {
     await switchToXLayer(provider);
@@ -30,7 +45,7 @@ export async function ensureXLayerNetwork() {
       await switchToXLayer(provider);
     } catch (addError) {
       if (isRpcChainMismatch(switchError) || isRpcChainMismatch(addError)) {
-        throw new Error(RABBY_RPC_FIX);
+        throw new Error(chainMismatchFixFor(provider));
       }
       throw addError;
     }
@@ -44,14 +59,31 @@ export async function ensureXLayerNetwork() {
   }
 }
 
-export function walletErrorMessage(error: unknown): string {
-  if (isRpcChainMismatch(error)) return RABBY_RPC_FIX;
+/**
+ * Sanitize an error for the UI. Caller-provided `context` lets us only show
+ * the chain-mismatch runbook when the user was actually in the
+ * chain-switch flow — otherwise a transient RPC throttle ("currently
+ * unavailable") gets misdiagnosed as a wallet-config problem.
+ */
+export function walletErrorMessage(
+  error: unknown,
+  context?: { chainSwitch?: boolean; provider?: EIP1193Provider },
+): string {
+  if (context?.chainSwitch && isRpcChainMismatch(error)) {
+    return chainMismatchFixFor(context.provider);
+  }
+  if (error instanceof BaseError) return error.shortMessage;
   return errorMessage(error) || "unknown error";
 }
 
-function getInjectedProvider(): EIP1193Provider | undefined {
-  if (typeof window === "undefined") return undefined;
-  return (window as Window & { ethereum?: EIP1193Provider }).ethereum;
+function chainMismatchFixFor(provider: EIP1193Provider | undefined): string {
+  return isRabby(provider) ? RABBY_RPC_FIX : GENERIC_CHAIN_MISMATCH_FIX;
+}
+
+function isRabby(provider: EIP1193Provider | undefined): boolean {
+  if (!provider) return false;
+  const p = provider as EIP1193Provider & { isRabby?: boolean };
+  return p.isRabby === true;
 }
 
 function switchToXLayer(provider: EIP1193Provider) {
@@ -68,9 +100,7 @@ function isUserRejected(error: unknown): boolean {
 function isRpcChainMismatch(error: unknown): boolean {
   const message = errorMessage(error).toLowerCase();
   return (
-    message.includes("invalid chain id") ||
-    message.includes("rpc invalid") ||
-    message.includes("currently unavailable")
+    message.includes("invalid chain id") || message.includes("rpc invalid")
   );
 }
 
@@ -83,6 +113,7 @@ function errorCode(error: unknown): number | undefined {
 }
 
 function errorMessage(error: unknown): string {
+  if (error instanceof BaseError) return error.shortMessage;
   if (error instanceof Error) return error.message;
   if (typeof error === "string") return error;
   if (typeof error === "object" && error !== null && "message" in error) {

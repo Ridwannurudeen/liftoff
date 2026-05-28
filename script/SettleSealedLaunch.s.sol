@@ -28,6 +28,7 @@ contract SettleSealedLaunch is Script {
     using StateLibrary for IPoolManager;
 
     function run() external {
+        require(block.chainid == 196, "wrong chain: expected X Layer mainnet 196");
         uint256 pk = vm.envUint("PRIVATE_KEY");
         SealedLaunch launch = SealedLaunch(vm.envAddress("LAUNCH"));
         PoolId id = PoolId.wrap(vm.envBytes32("POOL_ID"));
@@ -35,7 +36,9 @@ contract SettleSealedLaunch is Script {
         vm.startBroadcast(pk);
         launch.settle(id);
         launch.claim(id);
-        _demoSwap(launch, id);
+        if (!vm.envOr("SKIP_DEMO_SWAP", false)) {
+            _demoSwap(launch, id);
+        }
         vm.stopBroadcast();
 
         _report(launch, id, vm.addr(pk));

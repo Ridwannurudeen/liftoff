@@ -38,7 +38,14 @@ export function LaunchSummary({
   launchAddr: string;
   poolId: PoolId;
 }) {
-  const oklink = (a: string) => `https://www.oklink.com/xlayer/address/${a}`;
+  // Defense-in-depth: only build a real href for syntactically-valid
+  // addresses. Contract-returned `Address` values are already constrained
+  // by viem's ABI decoder, but a future change that swaps the field for a
+  // looser string type would otherwise become a `javascript:` URL sink.
+  const oklink = (a: string) =>
+    /^0x[a-fA-F0-9]{40}$/.test(a)
+      ? `https://www.oklink.com/xlayer/address/${a}`
+      : "#";
 
   return (
     <div className="card">

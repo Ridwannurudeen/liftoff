@@ -8,7 +8,8 @@ import {
 } from "viem";
 
 import { commitRevealLaunchAbi } from "../abi/commit-reveal.js";
-import type { LaunchParams, PoolId } from "./types.js";
+import { resolveAccount, resolveChain } from "../internal/resolveAccount.js";
+import type { LaunchParams, PoolId, PoolKey } from "./types.js";
 
 /**
  * Args every write helper needs:
@@ -25,32 +26,25 @@ export interface WriteCtx {
   account?: Account | Address;
 }
 
-function resolveAccount(ctx: WriteCtx): Account | Address {
-  const a = ctx.account ?? ctx.wallet.account;
-  if (!a) {
-    throw new Error(
-      "[sealed-launch-sdk] No account: pass `account` or use a WalletClient created with `account: ...`.",
-    );
-  }
-  return a;
-}
-
 export interface CreateLaunchResult {
   txHash: Hex;
   poolId: PoolId;
   token: Address;
+  key: PoolKey;
 }
 
 /**
  * Deploy a new `LaunchToken`, configure the gating hook, and open the commit
- * window. Returns the tx hash plus the `poolId` and freshly-deployed token
- * address recovered from the `LaunchCreated` event in the receipt.
+ * window. Returns the tx hash plus the `poolId`, freshly-deployed token
+ * address, and `PoolKey` recovered from the `LaunchCreated` event in the
+ * receipt.
  */
 export async function createLaunch(
   ctx: WriteCtx,
   params: LaunchParams,
 ): Promise<CreateLaunchResult> {
   const account = resolveAccount(ctx);
+  const chain = resolveChain(ctx);
   const txHash = await ctx.wallet.writeContract({
     address: ctx.launch,
     abi: commitRevealLaunchAbi,
@@ -72,7 +66,7 @@ export async function createLaunch(
       },
     ],
     account,
-    chain: ctx.wallet.chain ?? null,
+    chain,
   });
 
   const receipt = await ctx.public.waitForTransactionReceipt({ hash: txHash });
@@ -86,8 +80,18 @@ export async function createLaunch(
         topics: log.topics,
       });
       if (decoded.eventName === "LaunchCreated") {
-        const args = decoded.args as { id: Hex; token: Address };
-        return { txHash, poolId: args.id, token: args.token };
+        const args = decoded.args as {
+          id: Hex;
+          token: Address;
+          launcher: Address;
+          key: PoolKey;
+        };
+        return {
+          txHash,
+          poolId: args.id,
+          token: args.token,
+          key: args.key,
+        };
       }
     } catch {
       // Skip logs that don't decode under this ABI.
@@ -108,13 +112,14 @@ export interface CommitArgs {
 /** Post a sealed commitment + escrow the masked deposit. One commit per wallet per launch. */
 export async function commit(ctx: WriteCtx, args: CommitArgs): Promise<Hex> {
   const account = resolveAccount(ctx);
+  const chain = resolveChain(ctx);
   return ctx.wallet.writeContract({
     address: ctx.launch,
     abi: commitRevealLaunchAbi,
     functionName: "commit",
     args: [args.poolId, args.commitment, args.masked],
     account,
-    chain: ctx.wallet.chain ?? null,
+    chain,
   });
 }
 
@@ -131,13 +136,14 @@ export interface RevealArgs {
  */
 export async function reveal(ctx: WriteCtx, args: RevealArgs): Promise<Hex> {
   const account = resolveAccount(ctx);
+  const chain = resolveChain(ctx);
   return ctx.wallet.writeContract({
     address: ctx.launch,
     abi: commitRevealLaunchAbi,
     functionName: "reveal",
     args: [args.poolId, args.amount, args.salt],
     account,
-    chain: ctx.wallet.chain ?? null,
+    chain,
   });
 }
 
@@ -147,13 +153,14 @@ export async function settle(
   args: { poolId: PoolId },
 ): Promise<Hex> {
   const account = resolveAccount(ctx);
+  const chain = resolveChain(ctx);
   return ctx.wallet.writeContract({
     address: ctx.launch,
     abi: commitRevealLaunchAbi,
     functionName: "settle",
     args: [args.poolId],
     account,
-    chain: ctx.wallet.chain ?? null,
+    chain,
   });
 }
 
@@ -163,13 +170,14 @@ export async function claim(
   args: { poolId: PoolId },
 ): Promise<Hex> {
   const account = resolveAccount(ctx);
+  const chain = resolveChain(ctx);
   return ctx.wallet.writeContract({
     address: ctx.launch,
     abi: commitRevealLaunchAbi,
     functionName: "claim",
     args: [args.poolId],
     account,
-    chain: ctx.wallet.chain ?? null,
+    chain,
   });
 }
 
@@ -182,12 +190,13 @@ export async function reclaim(
   args: { poolId: PoolId },
 ): Promise<Hex> {
   const account = resolveAccount(ctx);
+  const chain = resolveChain(ctx);
   return ctx.wallet.writeContract({
     address: ctx.launch,
     abi: commitRevealLaunchAbi,
     functionName: "reclaim",
     args: [args.poolId],
     account,
-    chain: ctx.wallet.chain ?? null,
+    chain,
   });
 }

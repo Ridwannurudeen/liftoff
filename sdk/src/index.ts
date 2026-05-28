@@ -31,6 +31,7 @@ export {
   clearingPrice,
   getBid,
   getLaunch,
+  hasCommitted,
   phaseOf,
   totalRevealed,
   type Phase,
