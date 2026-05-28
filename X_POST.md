@@ -1,5 +1,7 @@
 # X post (draft — do NOT post without approval)
 
+**Posted from:** `@sealedlaunch` (project account). All three required tags below stay in the body even though they're separate handles.
+
 ## Option A — single post
 Sealed Launch is live on @XLayerOfficial: a @Uniswap v4 hook where token launches clear at ONE uniform price, pro-rata.
 

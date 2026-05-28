@@ -42,6 +42,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
+    site: "@sealedlaunch",
+    creator: "@sealedlaunch",
     title: "Sealed Launch — order-independent batch auctions on X Layer",
     description:
       "Sealed, uniform-price batch auctions for token launches — a Uniswap v4 hook on X Layer.",
