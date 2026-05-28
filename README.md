@@ -92,7 +92,7 @@ The hook address is CREATE2-mined (`HookMiner`) so its low bits carry the permis
 
 | Contract | Address |
 |---|---|
-| CommitRevealLaunch (manager) | `0xaed6BD08CDBaD833312d6BcFd9F97954350F606e` |
+| CommitRevealLaunch (manager) | `0xaeD6bd08CDBaD833312d6BCFd9F97954350F606e` |
 | dUSD2 (demo quote) | `0x632bdC371EF86b9238dE795aEE2babABE3A5A277` |
 | SBID (demo token) | `0xe39a3D775690C419f07A029d2423c74a74b86952` |
 

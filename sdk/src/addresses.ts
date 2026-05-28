@@ -27,7 +27,7 @@ export const SEALED_LAUNCH_V1: Address =
  * (real bid amounts stay hidden on-chain until the reveal window).
  */
 export const COMMIT_REVEAL_LAUNCH_V2: Address =
-  "0xaed6BD08CDBaD833312d6BcFd9F97954350F606e";
+  "0xaeD6bd08CDBaD833312d6BCFd9F97954350F606e";
 
 /**
  * Default v0.1 mainnet preset — pass to `getContracts({ chainId: 196 })`

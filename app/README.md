@@ -18,7 +18,7 @@ Out of scope for v0.1 (planned next): launch discovery (no indexer yet), the `cr
 cd app
 npm install
 npm run dev
-# open http://localhost:3000
+# open http://localhost:3000/app
 ```
 
 `sealed-launch-sdk` is consumed via `file:../sdk`, so a `npm install` from the
@@ -28,7 +28,7 @@ parent `sdk/` first is required (already in this repo's git history). Re-run
 ## Deep link to a specific launch
 
 ```
-http://localhost:3000/?launch=0xaed6BD08CDBaD833312d6BcFd9F97954350F606e&poolId=0x33bd0be4...
+http://localhost:3000/app?launch=0xaeD6bd08CDBaD833312d6BCFd9F97954350F606e&poolId=0x33bd0be4...
 ```
 
 Both query params are validated as `address` / `bytes32` before they replace the demo defaults.

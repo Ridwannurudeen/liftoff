@@ -32,7 +32,7 @@ Fairness is a property of the mechanism, not a tunable parameter — provably un
 - A real launch ran end-to-end: open auction → commit → settle at the uniform clearing price → seed LP → live swap. Verified on-chain: `isSettled = true`, pool liquidity `> 0`. Tx provenance in `broadcast/DeploySealedLaunch.s.sol/196/` and `broadcast/SettleSealedLaunch.s.sol/196/`.
 
 **v2 (CommitRevealLaunch) — also deployed on X Layer mainnet, multi-bidder lifecycle settled:**
-- **CommitRevealLaunch:** `0xaed6BD08CDBaD833312d6BcFd9F97954350F606e` — https://www.oklink.com/xlayer/address/0xaed6BD08CDBaD833312d6BcFd9F97954350F606e
+- **CommitRevealLaunch:** `0xaeD6bd08CDBaD833312d6BCFd9F97954350F606e` — https://www.oklink.com/xlayer/address/0xaeD6bd08CDBaD833312d6BCFd9F97954350F606e
 - **dUSD2 (demo quote):** `0x632bdC371EF86b9238dE795aEE2babABE3A5A277` — https://www.oklink.com/xlayer/address/0x632bdC371EF86b9238dE795aEE2babABE3A5A277
 - **SBID (demo token):** `0xe39a3D775690C419f07A029d2423c74a74b86952` — https://www.oklink.com/xlayer/address/0xe39a3D775690C419f07A029d2423c74a74b86952
 - Two distinct on-chain bidders posted sealed commits (masked 1000 + 500 dUSD2), revealed asymmetric real bids (700 + 300 dUSD2) during the reveal window, the auction cleared at one uniform price, both bidders claimed their pro-rata allocations (280,000 + 120,000 SBID), and a post-settlement swap traded the now-open pool. The masked deposits hide bid sizes on-chain until reveal — the auction is now order-independent **and** size-sealed. Tx provenance: `broadcast/DeployCommitRevealDemo.s.sol/196/`, `broadcast/RevealCommitRevealDemo.s.sol/196/`, `broadcast/SettleCommitRevealDemo.s.sol/196/`.

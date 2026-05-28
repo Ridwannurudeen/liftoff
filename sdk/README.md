@@ -80,7 +80,7 @@ The TS helper produces the exact same `bytes32` as the on-chain `commitmentFor`:
 commitmentFor({ amount, salt, bidder }) === keccak256(abi.encode(uint256, bytes32, address))
 ```
 
-Verified against the live v2 demo on X Layer mainnet — see [`broadcast/`](../broadcast) and the on-chain manager at `0xaed6BD08CDBaD833312d6BcFd9F97954350F606e`.
+Verified against the live v2 demo on X Layer mainnet — see [`broadcast/`](../broadcast) and the on-chain manager at `0xaeD6bd08CDBaD833312d6BCFd9F97954350F606e`.
 
 ## Scope (v0.1)
 

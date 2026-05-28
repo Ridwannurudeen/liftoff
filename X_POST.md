@@ -29,7 +29,7 @@ A first-block buyer and a last-block buyer get the identical price and allocatio
 Repo: github.com/Ridwannurudeen/liftoff
 Live: liftoff.gudman.xyz
 v1 Hook: oklink.com/xlayer/address/0x594B539591e51e7981b05126B7e4d869C3BaA880
-v2 Manager: oklink.com/xlayer/address/0xaed6BD08CDBaD833312d6BcFd9F97954350F606e
+v2 Manager: oklink.com/xlayer/address/0xaeD6bd08CDBaD833312d6BCFd9F97954350F606e
 Demo: [VIDEO URL]
 #XLayer #UniswapV4
 

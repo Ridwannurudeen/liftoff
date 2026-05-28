@@ -15,10 +15,17 @@ import {
   type PoolId,
 } from "sealed-launch-sdk";
 import { erc20Abi, parseUnits, type Address, type Hex } from "viem";
-import { useAccount, usePublicClient, useWalletClient } from "wagmi";
+import {
+  useAccount,
+  useChainId,
+  usePublicClient,
+  useWalletClient,
+} from "wagmi";
 
+import { xLayer } from "@/lib/chain";
 import { fmtAmount, fmtCountdown } from "@/lib/format";
 import { clearSalt, loadSalt, saveSalt } from "@/lib/saltStore";
+import { walletErrorMessage } from "@/lib/walletNetwork";
 
 interface ActionPanelProps {
   launch: Launch;
@@ -72,6 +79,7 @@ export function ActionPanel({
   refetch,
 }: ActionPanelProps) {
   const { address } = useAccount();
+  const chainId = useChainId();
   const publicClient = usePublicClient();
   const { data: walletClient } = useWalletClient();
 
@@ -97,6 +105,18 @@ export function ActionPanel({
       <div className="card">
         <h2>Actions</h2>
         <p className="muted">Connect a wallet to commit, reveal, or claim.</p>
+      </div>
+    );
+  }
+
+  if (chainId !== xLayer.id) {
+    return (
+      <div className="card">
+        <h2>Actions</h2>
+        <p className="muted">
+          Switch your wallet to X Layer Mainnet before committing, revealing,
+          settling, or claiming.
+        </p>
       </div>
     );
   }
@@ -483,8 +503,7 @@ function ReclaimButton({
 }
 
 function errMsg(e: unknown): string {
-  if (e instanceof Error) return e.message;
-  return typeof e === "string" ? e : "unknown error";
+  return walletErrorMessage(e);
 }
 
 function formatBigForInput(v: bigint): string {
