@@ -15,10 +15,10 @@
       "purpose": "any"
     },
     {
-      "src": "/app/apple-icon.svg",
+      "src": "/app/icon.svg",
       "sizes": "180x180",
       "type": "image/svg+xml",
-      "purpose": "any"
+      "purpose": "maskable"
     }
   ]
 }
