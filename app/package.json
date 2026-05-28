@@ -1,0 +1,28 @@
+{
+  "name": "sealed-launch-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Next.js launch lifecycle dApp for Sealed Launch — drives a v2 (or v1) auction end-to-end on top of sealed-launch-sdk.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.62.0",
+    "next": "^15.5.4",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "sealed-launch-sdk": "file:../sdk",
+    "viem": "^2.51.0",
+    "wagmi": "^2.16.9"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "typescript": "^5.7.0"
+  }
+}
