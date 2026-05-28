@@ -21,3 +21,7 @@ node_modules/
 
 # Demo-only second-bidder key (v2 commit-reveal mainnet demo)
 .bidder2-key
+
+# SDK build artifacts
+sdk/dist/
+sdk/node_modules/
