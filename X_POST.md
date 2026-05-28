@@ -28,7 +28,7 @@ A first-block buyer and a last-block buyer get the identical price and allocatio
 5/ v2 went live today: a sealed-bid commit-reveal mode. Bidders post `keccak256(amount, salt, bidder)` + a masked escrow during the commit window, then reveal the real amount later. Bid SIZES stay hidden on-chain until reveal — order-independent AND size-sealed.
 
 6/ Both versions are settled on X Layer mainnet against the OFFICIAL @Uniswap v4 PoolManager. v1 cleared 1,000 dUSD into a fresh pool. v2 just settled two on-chain bidders (masked 1000+500 → revealed 700+300 → 280k/120k SBID claimed pro-rata → live post-settlement swap).
-Repo: github.com/Ridwannurudeen/liftoff
+Repo: github.com/Ridwannurudeen/sealedlaunch
 Live: sealedlaunch.gudman.xyz
 v1 Hook: oklink.com/xlayer/address/0x594B539591e51e7981b05126B7e4d869C3BaA880
 v2 Manager: oklink.com/xlayer/address/0xaeD6bd08CDBaD833312d6BCFd9F97954350F606e

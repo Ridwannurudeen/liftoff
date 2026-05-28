@@ -14,7 +14,7 @@ Token launches get sniped. Every existing defense — fee decay, Dutch auctions,
 | Interactive dApp | https://sealedlaunch.gudman.xyz/app |
 | Create a launch | https://sealedlaunch.gudman.xyz/app/create |
 | X (Twitter) | https://x.com/sealedlaunch |
-| GitHub | https://github.com/Ridwannurudeen/liftoff |
+| GitHub | https://github.com/Ridwannurudeen/sealedlaunch |
 
 > The repo is named `liftoff` for historical reasons — Sealed Launch evolved from a prior fair-launch hook in this same repo. The project name is **Sealed Launch**.
 
@@ -199,4 +199,4 @@ OKX **Build X — Hook the Future** hackathon. Uniswap v4 · X Layer · flap.sh.
 
 ---
 
-[@sealedlaunch](https://x.com/sealedlaunch) · [github.com/Ridwannurudeen/liftoff](https://github.com/Ridwannurudeen/liftoff)
+[@sealedlaunch](https://x.com/sealedlaunch) · [github.com/Ridwannurudeen/sealedlaunch](https://github.com/Ridwannurudeen/sealedlaunch)

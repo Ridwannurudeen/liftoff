@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "description": "TypeScript SDK for Sealed Launch — an order-independent, uniform-price batch-auction launch hook for Uniswap v4 on X Layer. Wraps v2 CommitRevealLaunch (size-sealed) and v1 SealedLaunch (order-independent).",
   "license": "MIT",
-  "homepage": "https://github.com/Ridwannurudeen/liftoff",
+  "homepage": "https://github.com/Ridwannurudeen/sealedlaunch",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Ridwannurudeen/liftoff.git",
+    "url": "https://github.com/Ridwannurudeen/sealedlaunch.git",
     "directory": "sdk"
   },
   "type": "module",

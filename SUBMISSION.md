@@ -39,7 +39,7 @@ Fairness is a property of the mechanism, not a tunable parameter — provably un
 
 **Links:**
 - Live site: https://sealedlaunch.gudman.xyz (reads the deployed auction's state live from X Layer) — interactive launch lifecycle dApp at https://sealedlaunch.gudman.xyz/app
-- GitHub: https://github.com/Ridwannurudeen/liftoff
+- GitHub: https://github.com/Ridwannurudeen/sealedlaunch
 - Demo video (1–3 min): `[ADD YOUTUBE/LOOM URL]`
 
 **Required social post:** see `X_POST.md` (tags @XLayerOfficial @Uniswap @flapdotsh).

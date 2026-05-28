@@ -1,6 +1,6 @@
 # sealed-launch-app
 
-The reference dApp for [Sealed Launch](https://github.com/Ridwannurudeen/liftoff) — a Next.js client that drives a commit / reveal / settle / claim auction end-to-end against the live X Layer (chain 196) deployment.
+The reference dApp for [Sealed Launch](https://github.com/Ridwannurudeen/sealedlaunch) — a Next.js client that drives a commit / reveal / settle / claim auction end-to-end against the live X Layer (chain 196) deployment.
 
 Package: `sealed-launch-app` · v0.1.0 · private (not published to npm).
 
