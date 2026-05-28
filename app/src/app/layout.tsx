@@ -50,6 +50,11 @@ export const metadata: Metadata = {
   manifest: "/app/manifest.webmanifest",
   alternates: { canonical: `${SITE_URL}/app` },
   robots: { index: true, follow: true },
+  icons: {
+    icon: [{ url: "/app/icon.svg", type: "image/svg+xml" }],
+    apple: [{ url: "/app/icon.svg", type: "image/svg+xml" }],
+    shortcut: [{ url: "/app/icon.svg", type: "image/svg+xml" }],
+  },
 };
 
 export const viewport: Viewport = {
