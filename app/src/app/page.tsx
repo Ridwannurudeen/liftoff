@@ -84,15 +84,98 @@ export default function Page() {
       </header>
 
       <section className="hero">
-        <h1>Auction lifecycle</h1>
+        <h1>Drive a sealed batch-auction launch — live on X Layer mainnet</h1>
         <p>
-          Read live state for any Sealed Launch v2 auction on X Layer, then
-          commit, reveal, settle, or claim from your wallet. Defaults to the
-          mainnet demo at <span className="mono">{DEMO_LAUNCH}</span>.
+          Sealed Launch settles every token launch at one uniform clearing
+          price. v1 is order-independent. v2 hides bid sizes via hashed commit +
+          reveal. Both run on the{" "}
+          <strong>official Uniswap v4 PoolManager</strong> on X Layer (chain
+          196). Connect a wallet and drive the lifecycle below.
         </p>
       </section>
 
-      <div className="card" style={{ marginTop: 24 }}>
+      <div className="card" style={{ marginTop: 28 }}>
+        <h2>Live mainnet deployment</h2>
+        <div className="row">
+          <span className="k">v2 — CommitRevealLaunch</span>
+          <a
+            className="v mono"
+            href={`https://www.oklink.com/xlayer/address/${DEMO_LAUNCH}`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {DEMO_LAUNCH}
+          </a>
+        </div>
+        <div className="row">
+          <span className="k">v1 — SealedLaunch (manager)</span>
+          <a
+            className="v mono"
+            href="https://www.oklink.com/xlayer/address/0xd6a240183eea10cd74f9911FE3f7717c90564B8C"
+            target="_blank"
+            rel="noreferrer"
+          >
+            0xd6a240183eea10cd74f9911FE3f7717c90564B8C
+          </a>
+        </div>
+        <div className="row">
+          <span className="k">SealedLaunchHook (shared)</span>
+          <a
+            className="v mono"
+            href="https://www.oklink.com/xlayer/address/0x594B539591e51e7981b05126B7e4d869C3BaA880"
+            target="_blank"
+            rel="noreferrer"
+          >
+            0x594B539591e51e7981b05126B7e4d869C3BaA880
+          </a>
+        </div>
+        <div className="row">
+          <span className="k">Official v4 PoolManager (X Layer)</span>
+          <a
+            className="v mono"
+            href="https://www.oklink.com/xlayer/address/0x360E68faCcca8cA495c1B759Fd9EEe466db9FB32"
+            target="_blank"
+            rel="noreferrer"
+          >
+            0x360E68faCcca8cA495c1B759Fd9EEe466db9FB32
+          </a>
+        </div>
+        <div className="row">
+          <span className="k">Demo auction (v2)</span>
+          <span className="v">
+            settled · 1,000 dUSD2 cleared · 280k+120k SBID claimed pro-rata ·
+            live swap proven
+          </span>
+        </div>
+      </div>
+
+      <div className="card" style={{ marginTop: 20 }}>
+        <h2>How the auction works</h2>
+        <ol style={{ paddingLeft: "20px", marginTop: 4 }}>
+          <li className="muted" style={{ marginBottom: 6 }}>
+            <strong>Commit window</strong> — bidders post a hashed commitment (
+            <span className="mono">keccak256(amount, salt, bidder)</span>) and
+            escrow a masked deposit. The pool is gated; nobody can trade.
+          </li>
+          <li className="muted" style={{ marginBottom: 6 }}>
+            <strong>Reveal window</strong> — bidders reveal the real amount +
+            salt. Masked overage refunds atomically. Bid sizes appear on-chain
+            only here.
+          </li>
+          <li className="muted" style={{ marginBottom: 6 }}>
+            <strong>Settle</strong> — anyone calls it. Clears at one uniform
+            price <span className="mono">P = total / offered</span>, seeds
+            full-range LP, opens trading.
+          </li>
+          <li className="muted">
+            <strong>Claim / reclaim</strong> — bidders claim their pro-rata
+            allocation. Non-revealers reclaim their masked deposit. First-block
+            and last-block buyers get the identical price.
+          </li>
+        </ol>
+      </div>
+
+      <div className="card" style={{ marginTop: 20 }}>
         <h2>Pick a launch</h2>
         <div className="field">
           <label>CommitRevealLaunch manager address</label>

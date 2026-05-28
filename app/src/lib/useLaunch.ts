@@ -16,7 +16,8 @@ export function useLaunch(args: {
   poolId: PoolId | undefined;
   user: Address | undefined;
 }) {
-  const publicClient = usePublicClient();
+  // Pin to chainId 196 so SSR + cold mounts never see an undefined client.
+  const publicClient = usePublicClient({ chainId: 196 });
 
   return useQuery({
     queryKey: ["launch", args.launch, args.poolId, args.user],
