@@ -1,0 +1,24 @@
+{
+  "name": "Sealed Launch",
+  "short_name": "SealedLaunch",
+  "description": "Drive a Sealed Launch (Uniswap v4 hook on X Layer) auction end-to-end: commit, reveal, settle, claim.",
+  "start_url": "/app",
+  "scope": "/app",
+  "display": "standalone",
+  "background_color": "#06070d",
+  "theme_color": "#06070d",
+  "icons": [
+    {
+      "src": "/app/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/app/apple-icon.svg",
+      "sizes": "180x180",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
