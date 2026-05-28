@@ -1,117 +1,151 @@
-# Sealed Launch — an order-independent fair-launch hook for Uniswap v4 on X Layer
+# Sealed Launch
 
-**A token launches through a sealed, uniform-price batch auction running entirely inside a Uniswap v4 hook.** During the launch window the pool can't be swapped; buyers commit quote tokens; at window close everyone clears at **one uniform price**, pro-rata. Being first — or paying to be first — buys you *nothing*. Then the pool opens for normal trading, seeded with liquidity at the clearing price.
+**A sealed batch-auction launch hook for Uniswap v4 on X Layer.** Live on mainnet against the official v4 PoolManager (chain 196).
 
-Built for the OKX **Build X "Hook the Future"** hackathon, deployed against the **official Uniswap v4 PoolManager on X Layer mainnet** (`0x360E68faCcca8cA495c1B759Fd9EEe466db9FB32`).
+Token launches get sniped. Every existing defense — fee decay, Dutch auctions, fixed-price windows, priority-fee MEV taxes — still rewards whoever orders first or pays the most to be ordered first. Sealed Launch doesn't fight ordering. It makes ordering irrelevant: bids are sealed during the window, everyone clears at one uniform price, allocation is pro-rata to what you committed.
 
-**Live:**
-- https://sealedlaunch.gudman.xyz — the pitch + read-only auction state widget (no wallet, no backend).
-- https://sealedlaunch.gudman.xyz/app — interactive launch lifecycle dApp: connect a wallet, paste any v2 launch + poolId (defaults to the mainnet demo), commit / reveal / settle / claim.
+> **Order doesn't matter. One uniform price.** Being first — or paying to be first — buys you nothing, because there is no front.
 
-## Why this, and why X Layer specifically
+## Quick links
 
-In December 2025 X Layer migrated to the **OP Stack** and runs a **flashblocks** sequencer. We tested real mainnet blocks: transactions are **not** ordered by priority fee — block-level ordering is effectively unpredictable. That breaks the two fashionable anti-MEV designs:
+| | |
+|---|---|
+| Live site | https://sealedlaunch.gudman.xyz/ |
+| Interactive dApp | https://sealedlaunch.gudman.xyz/app |
+| Create a launch | https://sealedlaunch.gudman.xyz/app/create |
+| X (Twitter) | https://x.com/sealedlaunch |
+| GitHub | https://github.com/Ridwannurudeen/liftoff |
 
-- **Priority-fee "MEV-tax" hooks** (Angstrom-style) need descending-priority-fee ordering — which X Layer doesn't provide.
-- **Oracle / LVR-aware AMMs** need a price feed — and no general-purpose price oracle is confirmed live on X Layer.
+> The repo is named `liftoff` for historical reasons — Sealed Launch evolved from a prior fair-launch hook in this same repo. The project name is **Sealed Launch**.
 
-So instead of fighting ordering, **Sealed Launch makes ordering irrelevant.** A uniform-price batch auction is fair *by construction*: the clearing price and your allocation depend only on the ratio of your commitment to the total — never on which block, which position, or how much gas you paid. On a chain where you can't predict ordering, that's the only launch that is provably un-snipeable.
+## The problem
 
-Existing launch hooks (Flaunch, Doppler) compete on fee-decay and Dutch auctions; MEV-capture hooks (Angstrom) route value to LPs and aren't built for launches. A **sealed uniform-price batch auction as a v4 launch hook** is proposed in research but, to our knowledge, has not been shipped. flap.sh — a launchpad and a co-initiator of this hackathon — has no anti-snipe today; Sealed Launch is directly adoptable as its fair-launch mode.
+Whoever orders the trade first walks away with the cheap supply; retail eats the markup. That's the default for every token launch today.
 
-## How it maps to the judging criteria
+- **Fee decay** — high opening fee that drops over time. The fastest wallet still wins; it just pays a tax to do it.
+- **Dutch auctions** — price falls from a ceiling. First acceptable bid clears. Block ordering decides who.
+- **Fixed-price windows** — first wallet to commit wins the allocation. Pure speed competition.
+- **Priority-fee MEV taxes** — require descending-priority-fee block ordering. X Layer doesn't provide that.
 
-- **Innovation** — order-independent, uniform-price sealed batch auction implemented as a v4 hook; fairness is a property of the mechanism, not a parameter. Verified white space.
-- **Market Potential** — every token launch needs anti-snipe; this is adoptable by X Layer's launchpads (flap.sh) and grows v4 pools, liquidity, real users and OKB gas on a chain whose v4 TVL is still tiny.
-- **Completion** — 62/62 Foundry tests (incl. a live X Layer mainnet fork) **and a real auction settled on mainnet**: deploy → commit → settle at one price → seed LP → trade. All inspectable on OKLink.
+In December 2025 X Layer migrated to the OP Stack and runs a **flashblocks** sequencer. We tested real mainnet blocks: transactions are not ordered by priority fee, and block-level ordering is effectively unpredictable. On a chain where you can't predict ordering, a sealed uniform-price batch auction is the only launch that's provably un-snipeable.
+
+## How it works
+
+Four phases. One price. Everyone clears the same.
+
+1. **Commit.** Bidders post a hashed commitment `keccak256(amount, salt, bidder)` and escrow a masked deposit (an upper bound on the real bid). The pool is gated by `SealedLaunchHook`; nobody can trade the token.
+2. **Reveal.** Bidders open their bid by submitting the real `amount + salt`. The overage is refunded atomically. Bid sizes appear on-chain only here.
+3. **Settle.** Anyone calls `settle()`. The auction clears at one uniform price, the pool is initialized at that price, full-range LP is seeded via `poolManager.unlock → modifyLiquidity`, and trading opens. If `totalRevealed < minRaise`, the launch fails and every committer can reclaim.
+4. **Claim.** Each revealer claims their pro-rata token allocation. Non-revealers reclaim their masked deposit.
+
+```
+clearingPrice P = totalRevealed / offeredTokens
+allocation(b) = offeredTokens * revealed(b) / totalRevealed
+```
+
+Fairness is a property of the mechanism, not a tunable parameter.
+
+## v1 vs v2
+
+Two managers, one shared gating hook.
+
+| | v1 — SealedLaunch | v2 — CommitRevealLaunch |
+|---|---|---|
+| Order-independent | yes | yes |
+| Bid sizes sealed on-chain | no | yes (hashed commit + masked deposit) |
+| Settlement | uniform price, pro-rata | uniform price, pro-rata |
+| Mechanism | direct commit | hashed commit + reveal |
+| Deployed on X Layer mainnet | yes | yes |
+
+v2 supersedes v1 for new launches. v1 stays live as historical proof of the first end-to-end mainnet settlement.
+
+**Honest scope notes:**
+
+- v1 is a *proportional uniform-price* batch: `allocation = offeredTokens * committed / totalCommitted`. Order-independent and un-snipeable, but commitment amounts are visible on-chain during the window.
+- v2 adds hashed-commit bid privacy on top of the same gating hook. Bid sizes only appear on-chain at reveal.
+- v2 has a documented "free-option" trade-off: a committer can skip reveal if the clearing price turns unfavorable. Bond-burn / partial-forfeiture hardening is a future iteration.
+- Hackathon-grade: a third-party audit is required before real TVL — see the disclosed-findings section below.
 
 ## Architecture
 
-Two contracts plus the launched token:
+- **`src/SealedLaunchHook.sol`** — v4 `BaseHook` with permissions `beforeInitialize | beforeAddLiquidity | beforeSwap` (`0x2880`). Pure access-control gate: reverts every swap until `markSettled` is called; blocks non-manager liquidity adds pre-settlement; holds no funds; runs no price math. Shared across v1 and v2 — the same hook address gates every pool.
+- **`src/SealedLaunch.sol`** — v1 manager. Factory + escrow + settlement (`IUnlockCallback`). Direct commitments, uniform clearing at window close, LP seeded at the clearing price, refunds on missed `minRaise`.
+- **`src/CommitRevealLaunch.sol`** — v2 manager. Adds a hashed commit + masked deposit on top of v1's clearing. Bid sizes stay hidden on-chain until reveal.
+- **`src/LaunchToken.sol`** — vanilla ERC-20 deployed per-launch by the manager. `offeredTokens` go pro-rata to revealers; `lpTokens` seed the v4 pool.
 
-- **`src/SealedLaunchHook.sol`** — the gating hook (`BaseHook`, permissions `beforeInitialize | beforeAddLiquidity | beforeSwap`). It holds no funds and runs no price math; it is purely the access-control gate around the pool:
-  - `_beforeSwap` reverts until the auction is `settled` — nobody trades the token before it clears.
-  - `_beforeAddLiquidity` reverts pre-settlement unless the caller is the launch manager — nobody front-runs the LP.
-  - `markSettled` (manager-only) opens the pool.
-- **`src/SealedLaunch.sol`** — factory + escrow + settlement (`IUnlockCallback`):
-  - `createLaunch` deploys the token, builds + configures the pool (not initialized yet — the pool is initialized *at* the clearing price), opens commitments.
-  - `commit(poolId, amount)` escrows quote. Order and block position are irrelevant.
-  - `settle(poolId)` computes the uniform clearing price `P = totalCommitted / offeredTokens`, initializes the pool at `P`, seeds full-range liquidity through `poolManager.unlock` → `modifyLiquidity`, opens trading, and forwards the raise to the launcher. If `totalCommitted < minRaise` the launch fails and commitments are refundable.
-  - `claim(poolId)` sends each buyer `offeredTokens · committed / totalCommitted`; `refund` returns funds on a failed launch.
+The hook address is CREATE2-mined (`HookMiner`) so its low bits carry the v4 permission flags. All managers initialize their pools against the official Uniswap v4 PoolManager on X Layer. Gas is paid in OKB.
 
-```
-LaunchParams {
-  string name; string symbol; uint256 totalSupply;
-  uint256 offeredTokens;  // sold to bidders, distributed pro-rata at the clearing price
-  uint256 lpTokens;       // seeded into the pool at settlement
-  Currency quote; uint64 startTime; uint64 endTime;
-  uint256 minRaise;       // launch fails (refunds) if not met
-  uint256 maxCommitPerWallet; int24 tickSpacing;
-}
-```
+## Live on X Layer mainnet (chain 196)
 
-## Deployed on X Layer mainnet (chain 196)
+| Contract | Address | OKLink |
+|---|---|---|
+| v2 CommitRevealLaunch (manager) | `0xaeD6bd08CDBaD833312d6BCFd9F97954350F606e` | [view](https://www.oklink.com/xlayer/address/0xaeD6bd08CDBaD833312d6BCFd9F97954350F606e) |
+| v1 SealedLaunch (manager) | `0xd6a240183eea10cd74f9911FE3f7717c90564B8C` | [view](https://www.oklink.com/xlayer/address/0xd6a240183eea10cd74f9911FE3f7717c90564B8C) |
+| SealedLaunchHook (shared) | `0x594B539591e51e7981b05126B7e4d869C3BaA880` | [view](https://www.oklink.com/xlayer/address/0x594B539591e51e7981b05126B7e4d869C3BaA880) |
+| Uniswap v4 PoolManager (official) | `0x360E68faCcca8cA495c1B759Fd9EEe466db9FB32` | [view](https://www.oklink.com/xlayer/address/0x360E68faCcca8cA495c1B759Fd9EEe466db9FB32) |
 
-| Contract | Address |
-|---|---|
-| SealedLaunchHook | `0x594B539591e51e7981b05126B7e4d869C3BaA880` |
-| SealedLaunch (manager) | `0xd6a240183eea10cd74f9911FE3f7717c90564B8C` |
-| SEAL (demo token) | `0x9A758af7A7EAB7B7F038caC7AA6127d232fC159B` |
-| dUSD (demo quote) | `0x8FfBcEdbD23B128b2652a2a2786515DdEF131182` |
+The v2 demo poolId (settled lifecycle): `0x33bd0be4` `4367cc00fb0c59e15ce1385e` `3160b6a9f07a1b39676256dd67686cca` (concatenate without spaces).
 
-A real launch was run end-to-end on mainnet (commit → settle at uniform price → LP seeded → live swap). On-chain proof: `isSettled = true`, pool liquidity `> 0`. Tx provenance in `broadcast/DeploySealedLaunch.s.sol/196/` and `broadcast/SettleSealedLaunch.s.sol/196/`.
+The v2 demo ran end-to-end on mainnet with two distinct on-chain bidders: deployer (`0x53Dd…`) and `0xDAf2e49A…` posted asymmetric sealed bids (masked 1000 + 500 dUSD2), revealed real amounts (700 + 300 dUSD2) during the reveal window with the overage refunded, the auction cleared at one uniform price, both bidders claimed pro-rata allocations (280,000 + 120,000 SBID = 7:3), and a post-settlement swap traded the now-open pool. Full tx provenance lives in `broadcast/DeployCommitRevealDemo.s.sol/196/`, `broadcast/RevealCommitRevealDemo.s.sol/196/`, and `broadcast/SettleCommitRevealDemo.s.sol/196/`.
 
-## Test
+## Try it
+
+Open the **[lifecycle viewer](https://sealedlaunch.gudman.xyz/app)** to drive any auction from one URL — defaults to the mainnet demo. Spin up your own launch from **[/app/create](https://sealedlaunch.gudman.xyz/app/create)**: deploy a fresh ERC-20 and open a v2 CommitRevealLaunch pool in one transaction with your own window, raise, and tick spacing. To preview a specific deployment, deep-link via `https://sealedlaunch.gudman.xyz/app?launch=<manager>&poolId=<id>` (only audited managers are trusted; unknown ones go read-only behind an explicit opt-in).
+
+## Local dev quickstart
 
 ```bash
-forge test                                       # full suite (62 tests)
-forge test --match-contract SealedLaunchTest     # v1 sealed batch auction (23)
-forge test --match-contract CommitRevealLaunch   # v2 commit-reveal sealed-bid (12)
+# contracts
+forge test                                       # 72/72 (incl. live X Layer mainnet fork test)
+forge test --match-contract CommitRevealLaunch   # v2 only
+
+# SDK
+cd sdk && npm install && npm run build && npm run typecheck
+
+# dApp
+cd app && npm install && npm run dev
 ```
 
-The headline test, `test_sniperFirstBlockSamePricePerTokenAsLastBlock`, proves a first-block "sniper" and a last-block buyer get **identical allocation and identical price per token**.
+Mainnet scripts assert `block.chainid == 196`; testnet scripts assert `1952`. Hook address is CREATE2-mined via `HookMiner`.
 
-## Deploy to X Layer
+### Deploy your own v2 launch
+
+The interactive path is **[/app/create](https://sealedlaunch.gudman.xyz/app/create)**: one tx, deploys an ERC-20 and opens a CommitRevealLaunch pool with your params. Programmatic equivalents live in `script/`:
 
 ```bash
-# Phase 1 — deploy hook + manager, open a launch, commit
-PRIVATE_KEY=0x.. WINDOW=150 forge script script/DeploySealedLaunch.s.sol:DeploySealedLaunch \
+# Reproduce the v2 demo: deploy a CR manager, mint demo dUSD2, open a launch, commit.
+PRIVATE_KEY=0x... forge script script/DeployCommitRevealDemo.s.sol:DeployCommitRevealDemo \
   --rpc-url https://rpc.xlayer.tech --broadcast
-# Phase 2 — after the window closes: settle at the uniform price, claim, trade
-PRIVATE_KEY=0x.. LAUNCH=0x.. POOL_ID=0x.. forge script script/SettleSealedLaunch.s.sol:SettleSealedLaunch \
+
+# After the reveal window closes, anyone can call settle.
+PRIVATE_KEY=0x... LAUNCH=0x... POOL_ID=0x... \
+  forge script script/SettleCommitRevealDemo.s.sol:SettleCommitRevealDemo \
   --rpc-url https://rpc.xlayer.tech --broadcast
 ```
 
-The hook address is CREATE2-mined (`HookMiner`) so its low bits carry the permission flags (`0x2880`). Gas is paid in **OKB**.
+## Documentation
 
-## v2 — Commit-Reveal sealed bids (live on X Layer mainnet, multi-bidder demo settled)
-
-`src/CommitRevealLaunch.sol` extends v1 with a hashed commit + masked deposit: bidders post `keccak256(amount, salt, bidder)` and escrow an upper-bound deposit; they reveal the real amount during a reveal window, with the overage refunded. The same `SealedLaunchHook` gates the pool (reused across v1 and v2 pools). Bid sizes stay hidden on-chain until reveal, so the auction is now order-*independent* **and** size-sealed. 12 dedicated unit tests cover seal/reveal correctness, pro-rata on revealed bids, failed-launch refunds, and pool seeding at the clearing price.
-
-**Deployed + demonstrated on X Layer mainnet (chain 196):**
-
-| Contract | Address |
-|---|---|
-| CommitRevealLaunch (manager) | `0xaeD6bd08CDBaD833312d6BCFd9F97954350F606e` |
-| dUSD2 (demo quote) | `0x632bdC371EF86b9238dE795aEE2babABE3A5A277` |
-| SBID (demo token) | `0xe39a3D775690C419f07A029d2423c74a74b86952` |
-
-Two on-chain bidders, asymmetric sealed bids: A masked 1000 dUSD2 / revealed 700, B masked 500 / revealed 300. Pro-rata claims (28:12 = 7:3) confirmed: A=280,000 SBID, B=120,000 SBID. Full lifecycle ran end-to-end on mainnet — both commits → both reveals (overages refunded) → settle at uniform clearing price → both claim → live post-settlement swap. Tx provenance in `broadcast/DeployCommitRevealDemo.s.sol/196/`, `broadcast/RevealCommitRevealDemo.s.sol/196/`, `broadcast/SettleCommitRevealDemo.s.sol/196/`.
-
-## Honest scope notes
-
-- v1 (live) is a **proportional uniform-price** batch (allocation = `offeredTokens · committed / totalCommitted`). It is order-independent and un-snipeable; v2 (`CommitRevealLaunch`) adds hashed-commit bid privacy on top of the same gating hook.
-- v2 commit-reveal has a documented "free-option" trade-off: a committer can skip reveal if the clearing price turns unfavorable. Bond-burn / partial-forfeiture hardening is a future iteration.
-- Hackathon-grade: a third-party audit is required before real TVL.
+- [`sdk/README.md`](sdk/README.md) — viem-native TypeScript SDK (v0.1, in-tree). Full v2 read + write surface, thin v1 wrappers, `commitmentFor` byte-verified against the on-chain demo.
+- [`app/README.md`](app/README.md) — Next.js 15 + React 19 + wagmi 2 dApp. Lifecycle viewer + create flow. Consumes the SDK via `file:../sdk`.
+- [`docs/DESIGN-phase3-5.md`](docs/DESIGN-phase3-5.md) — contract-level design for later phases.
+- [`docs/ERC-launch-covenants.md`](docs/ERC-launch-covenants.md) — draft EIP for on-chain launch covenants.
+- [`ROADMAP.md`](ROADMAP.md) — phase plan from hackathon hook to fair-issuance rail.
 
 ## Internal security audit (2026-05-28) — disclosed findings
 
-A full internal audit covering contracts, SDK, frontend and Foundry scripts was run on the day of the submission. The frontend, SDK and scripts findings are **patched in this commit** (see the commit log). The contract findings are deferred to a v1.1 / v2.1 redeploy because the live mainnet addresses cannot be patched in place — the deployed contracts are documented as known-limited v1.0.
+A full internal audit covering contracts, SDK, frontend and Foundry scripts was run on the day of the submission. **61 findings** across the four streams. The frontend, SDK and scripts findings are **patched in this commit** (see the commit log). The contract findings are deferred to a v1.1 / v2.1 redeploy because the live mainnet addresses cannot be patched in place — the deployed contracts are documented as known-limited v1.0. Contract source carries the v1.1 patches plus **10 new tests** covering them, but the **deployed v1.0 addresses are unchanged**.
+
+| Stream | Findings | Status |
+|---|---|---|
+| Frontend | covered in 61 total | patched in this commit |
+| SDK | covered in 61 total | patched in this commit |
+| Foundry scripts | covered in 61 total | patched in this commit |
+| Contracts | 2 CRITICAL + High/Medium | source-patched + 10 new tests; **live v1.0 addresses unchanged** |
 
 **Critical findings on the LIVE mainnet contracts (do NOT use for multi-launch production):**
 
 - **C-1 — `SealedLaunch.settle()` balance-sweep.** `src/SealedLaunch.sol:212-213` uses `quote.balanceOf(address(this))` to compute the launcher payout. If a second launch (legitimate or attacker-created) coexists on the same manager with the same quote token, settling either one drains the other's escrow to the settling launcher. Mitigated today by the manager hosting only the demo auction. **Do not host multiple concurrent launches on a single SealedLaunch v1 manager.**
-- **C-2 — `CommitRevealLaunch` LP can over-consume the shared balance.** `src/CommitRevealLaunch.sol` doesn't `require(quoteUsed <= totalRevealed)` after the `unlock` callback, doesn't bound `tickSpacing`/`_sqrtPriceX96`, and shares its quote balance with other launches on the same manager. A pathological launch can pull more quote during LP seeding than it raised, drawing from non-revealer escrow or sibling launches. Mitigated today by the manager hosting only the demo auction.
+- **C-2 — `CommitRevealLaunch` LP can over-consume the shared balance.** `src/CommitRevealLaunch.sol` doesn't `require(quoteUsed <= totalRevealed)` after the `unlock` callback, doesn't bound `tickSpacing` / `_sqrtPriceX96`, and shares its quote balance with other launches on the same manager. A pathological launch can pull more quote during LP seeding than it raised, drawing from non-revealer escrow or sibling launches. Mitigated today by the manager hosting only the demo auction.
 
 **High-severity findings (also deferred to v1.1):**
 
@@ -127,7 +161,7 @@ A full internal audit covering contracts, SDK, frontend and Foundry scripts was 
 2. Add `require(quoteUsed <= l.totalRevealed)` and `tickSpacing` / sqrtPrice bounds validation.
 3. Add `nonReentrant` on every external state-changing function.
 4. Restrict `SealedLaunchHook.configure` to an allowlist of trusted managers.
-5. New tests covering the cross-launch drain scenario.
+5. New tests covering the cross-launch drain scenario (10 added — `forge test` is 72/72).
 6. Redeploy to fresh mainnet addresses. The v1.0 demo addresses stay on-chain as historical proof.
 
 **Frontend / SDK / scripts findings — patched in this commit:**
@@ -136,6 +170,33 @@ A full internal audit covering contracts, SDK, frontend and Foundry scripts was 
 - SDK: `resolveChain(ctx)` throws if `WalletClient` has no chain (fixes wrong-chain broadcast); `createLaunch` result now includes the decoded `PoolKey`; `LP_FEE` ABI mutability corrected `view` → `pure`; `deriveSalt` normalizes to NFC; new `hasCommitted(b)` helper; unsafe `as` casts removed in reads; peer dep `viem ^2.21.0`.
 - Foundry scripts: `require(block.chainid == 196)` on every mainnet script (closes the cross-chain footgun from the shared v4 PoolManager address on X Layer + Arbitrum); `require(== 1952)` on the testnet script; `DeployLiftoff.s.sol` standardized to envUint + keyed broadcast; `DEMO_TICK_SPACING` constant; `SKIP_DEMO_SWAP` env gate.
 
-## v1 predecessor — Liftoff
+## Roadmap
 
-This repo began as **Liftoff**, a fair-launch + fair-life hook (time-decaying launch fee, LP lock, graduation, anti-dump caps). It is fully implemented, tested, and **also deployed on X Layer mainnet** (hook `0xA03D3d9043324955a4ea2a1bE77352851611E2C0`), and is retained as the documented predecessor — see [`docs/`](docs/) and `src/Liftoff.sol`. Sealed Launch supersedes it: fee-decay anti-snipe is commoditized (Flaunch/Doppler), whereas order-independent batch clearing is novel and uniquely suited to X Layer's flashblock sequencer.
+- **Phase 0 — Built** ✅ — v4 hook + v1/v2 managers, 72/72 Foundry tests, real auction settled on X Layer mainnet.
+- **Phase 1 — Win the hackathon** ✅ — deployed to mainnet, multi-bidder lifecycle settled on-chain, live state widget, demo video + submission.
+- **Phase 2 — Hook → product** — commit-reveal v2 shipped; SDK v0.1 + hosted dApp v0.1 shipped in-tree; next: auction variants, OKB fee routing, third-party audit before real TVL.
+- **Phase 3 — X Layer launch standard** — flap partnership as v4-native fair-launch mode; launchpad-as-a-service; fairness reputation; OKX OnchainOS skill + OKB-denominated fees.
+- **Phase 4 — Smarter auctions + multi-chain** — tiered / Dutch curves, allowlist/KYC gates, NFT vesting, anti-dump covenants; deploy on every chain with official v4 (Base, Arbitrum, Unichain, Ink, …).
+- **Phase 5 — Moonshot** — the fair-issuance rail for token markets; open standard other launchpads adopt; potentially an EIP for on-chain launch covenants.
+
+## Tests
+
+```bash
+forge test                                       # 72/72 (61 prior + 1 live mainnet fork + 10 new v1.1 audit tests)
+forge test --match-contract SealedLaunchTest     # v1 sealed batch auction
+forge test --match-contract CommitRevealLaunch   # v2 commit-reveal sealed-bid
+```
+
+The headline test, `test_sniperFirstBlockSamePricePerTokenAsLastBlock`, proves a first-block "sniper" and a last-block buyer receive identical allocation and identical price per token. The live mainnet fork test verifies the hook + manager wire-up against the real X Layer v4 PoolManager at the live block. The 10 new audit tests cover the v1.1 invariants (per-launch quote accounting, `quoteUsed <= totalRevealed`, manager allowlist, reentrancy guards, bounds checks).
+
+## Built for
+
+OKX **Build X — Hook the Future** hackathon. Uniswap v4 · X Layer · flap.sh. Tags: [@XLayerOfficial](https://x.com/XLayerOfficial) · [@Uniswap](https://x.com/Uniswap) · [@flapdotsh](https://x.com/flapdotsh).
+
+## License
+
+[MIT](LICENSE).
+
+---
+
+[@sealedlaunch](https://x.com/sealedlaunch) · [github.com/Ridwannurudeen/liftoff](https://github.com/Ridwannurudeen/liftoff)
