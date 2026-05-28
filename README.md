@@ -104,6 +104,38 @@ Two on-chain bidders, asymmetric sealed bids: A masked 1000 dUSD2 / revealed 700
 - v2 commit-reveal has a documented "free-option" trade-off: a committer can skip reveal if the clearing price turns unfavorable. Bond-burn / partial-forfeiture hardening is a future iteration.
 - Hackathon-grade: a third-party audit is required before real TVL.
 
+## Internal security audit (2026-05-28) — disclosed findings
+
+A full internal audit covering contracts, SDK, frontend and Foundry scripts was run on the day of the submission. The frontend, SDK and scripts findings are **patched in this commit** (see the commit log). The contract findings are deferred to a v1.1 / v2.1 redeploy because the live mainnet addresses cannot be patched in place — the deployed contracts are documented as known-limited v1.0.
+
+**Critical findings on the LIVE mainnet contracts (do NOT use for multi-launch production):**
+
+- **C-1 — `SealedLaunch.settle()` balance-sweep.** `src/SealedLaunch.sol:212-213` uses `quote.balanceOf(address(this))` to compute the launcher payout. If a second launch (legitimate or attacker-created) coexists on the same manager with the same quote token, settling either one drains the other's escrow to the settling launcher. Mitigated today by the manager hosting only the demo auction. **Do not host multiple concurrent launches on a single SealedLaunch v1 manager.**
+- **C-2 — `CommitRevealLaunch` LP can over-consume the shared balance.** `src/CommitRevealLaunch.sol` doesn't `require(quoteUsed <= totalRevealed)` after the `unlock` callback, doesn't bound `tickSpacing`/`_sqrtPriceX96`, and shares its quote balance with other launches on the same manager. A pathological launch can pull more quote during LP seeding than it raised, drawing from non-revealer escrow or sibling launches. Mitigated today by the manager hosting only the demo auction.
+
+**High-severity findings (also deferred to v1.1):**
+
+- **H-3 — `settle()` brick on launcher-chosen inputs.** Bad `tickSpacing` / `minRaise=0` with zero reveals / extreme price math can revert `settle()` permanently, locking every committer out of reclaim. v1.1 must add a `failed` fallback when the math is out of bounds.
+- **H-4 — `_activeKey` / `_activeId` reentrancy via ERC-777-style quote tokens.** Add `nonReentrant` modifiers on every external state-changing function.
+- **H-5 — Same shared-balance class as C-2** for the launcher payout path in v2.
+- **H-6 — Defense-in-depth `nonReentrant`** missing on the contract.
+- **M-9 — `SealedLaunchHook.configure` is unrestricted** — front-runnable, can deny a legitimate launch by pre-configuring a pool id with a different manager.
+
+**v1.1 / v2.1 fix plan (post-submission):**
+
+1. Replace balance-sweep with per-launch quote accounting (`launcherProceeds = l.totalRevealed - quoteUsed`, already correct in v2 except for the missing bound on `quoteUsed`).
+2. Add `require(quoteUsed <= l.totalRevealed)` and `tickSpacing` / sqrtPrice bounds validation.
+3. Add `nonReentrant` on every external state-changing function.
+4. Restrict `SealedLaunchHook.configure` to an allowlist of trusted managers.
+5. New tests covering the cross-launch drain scenario.
+6. Redeploy to fresh mainnet addresses. The v1.0 demo addresses stay on-chain as historical proof.
+
+**Frontend / SDK / scripts findings — patched in this commit:**
+
+- Frontend: phishing-link allowlist (`KNOWN_LAUNCHES`) for `?launch=` query-param + opt-in ack; ActionPanel goes read-only on untrusted; `QuoteFaucet` chain-id gate + amount cap + cooldown; `ensureXLayerNetwork` uses the connected wallet's provider (not `window.ethereum`); Rabby-runbook only fires for actual Rabby; all action buttons disabled while pending; multi-tab race blocked via pre-commit `fetchBid`; `oklink` hrefs validated; `/create` ERC-20 sanity-call + strict input validation.
+- SDK: `resolveChain(ctx)` throws if `WalletClient` has no chain (fixes wrong-chain broadcast); `createLaunch` result now includes the decoded `PoolKey`; `LP_FEE` ABI mutability corrected `view` → `pure`; `deriveSalt` normalizes to NFC; new `hasCommitted(b)` helper; unsafe `as` casts removed in reads; peer dep `viem ^2.21.0`.
+- Foundry scripts: `require(block.chainid == 196)` on every mainnet script (closes the cross-chain footgun from the shared v4 PoolManager address on X Layer + Arbitrum); `require(== 1952)` on the testnet script; `DeployLiftoff.s.sol` standardized to envUint + keyed broadcast; `DEMO_TICK_SPACING` constant; `SKIP_DEMO_SWAP` env gate.
+
 ## v1 predecessor — Liftoff
 
 This repo began as **Liftoff**, a fair-launch + fair-life hook (time-decaying launch fee, LP lock, graduation, anti-dump caps). It is fully implemented, tested, and **also deployed on X Layer mainnet** (hook `0xA03D3d9043324955a4ea2a1bE77352851611E2C0`), and is retained as the documented predecessor — see [`docs/`](docs/) and `src/Liftoff.sol`. Sealed Launch supersedes it: fee-decay anti-snipe is commoditized (Flaunch/Doppler), whereas order-independent batch clearing is novel and uniquely suited to X Layer's flashblock sequencer.
