@@ -12,6 +12,7 @@ import { useAccount } from "wagmi";
 import { ActionPanel } from "@/components/ActionPanel";
 import { ConnectButton } from "@/components/ConnectButton";
 import { LaunchSummary } from "@/components/LaunchSummary";
+import QuoteFaucet from "@/components/QuoteFaucet";
 import { YourBid } from "@/components/YourBid";
 import { useLaunch } from "@/lib/useLaunch";
 
@@ -176,6 +177,20 @@ export default function Page() {
       </div>
 
       <div className="card" style={{ marginTop: 20 }}>
+        <h2>Open your own launch</h2>
+        <p className="muted" style={{ marginBottom: 14 }}>
+          Deploy a fresh ERC-20 + open a CommitRevealLaunch pool on X Layer
+          mainnet — about 30 seconds, a few cents of OKB. The new auction&apos;s
+          poolId lands here so you can drive its lifecycle from this page.
+        </p>
+        <div className="actions">
+          <a className="btn" href="/create">
+            Create a launch →
+          </a>
+        </div>
+      </div>
+
+      <div className="card" style={{ marginTop: 20 }}>
         <h2>Pick a launch</h2>
         <div className="field">
           <label>CommitRevealLaunch manager address</label>
@@ -209,6 +224,10 @@ export default function Page() {
             Reset to demo
           </button>
         </div>
+      </div>
+
+      <div style={{ marginTop: 20 }}>
+        <QuoteFaucet />
       </div>
 
       {isLoading && (
