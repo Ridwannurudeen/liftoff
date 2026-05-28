@@ -218,7 +218,7 @@ export default function CreateLaunchPage() {
   return (
     <main className="shell">
       <header className="nav">
-        <a className="brand" href="https://liftoff.gudman.xyz">
+        <a className="brand" href="https://sealedlaunch.gudman.xyz">
           <span className="brand-mark">▲</span> Sealed Launch
         </a>
         <ConnectButton />

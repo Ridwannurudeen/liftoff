@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { Providers } from "./providers";
 import "./globals.css";
 
-const SITE_URL = "https://liftoff.gudman.xyz";
+const SITE_URL = "https://sealedlaunch.gudman.xyz";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),

@@ -38,7 +38,7 @@ Fairness is a property of the mechanism, not a tunable parameter — provably un
 - Two distinct on-chain bidders posted sealed commits (masked 1000 + 500 dUSD2), revealed asymmetric real bids (700 + 300 dUSD2) during the reveal window, the auction cleared at one uniform price, both bidders claimed their pro-rata allocations (280,000 + 120,000 SBID), and a post-settlement swap traded the now-open pool. The masked deposits hide bid sizes on-chain until reveal — the auction is now order-independent **and** size-sealed. Tx provenance: `broadcast/DeployCommitRevealDemo.s.sol/196/`, `broadcast/RevealCommitRevealDemo.s.sol/196/`, `broadcast/SettleCommitRevealDemo.s.sol/196/`.
 
 **Links:**
-- Live site: https://liftoff.gudman.xyz (reads the deployed auction's state live from X Layer) — interactive launch lifecycle dApp at https://liftoff.gudman.xyz/app
+- Live site: https://sealedlaunch.gudman.xyz (reads the deployed auction's state live from X Layer) — interactive launch lifecycle dApp at https://sealedlaunch.gudman.xyz/app
 - GitHub: https://github.com/Ridwannurudeen/liftoff
 - Demo video (1–3 min): `[ADD YOUTUBE/LOOM URL]`
 

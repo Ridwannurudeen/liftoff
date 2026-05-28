@@ -5,7 +5,7 @@ Sealed Launch is live on @XLayerOfficial: a @Uniswap v4 hook where token launche
 
 v1 makes block order irrelevant. v2 (deployed today) seals the bid sizes too — hashed commit + reveal. Two on-chain bidders settled live.
 
-Built for @flapdotsh · liftoff.gudman.xyz
+Built for @flapdotsh · sealedlaunch.gudman.xyz
 #XLayer #UniswapV4
 
 [attach: 30–60s demo clip]
@@ -27,7 +27,7 @@ A first-block buyer and a last-block buyer get the identical price and allocatio
 
 6/ Both versions are settled on X Layer mainnet against the OFFICIAL @Uniswap v4 PoolManager. v1 cleared 1,000 dUSD into a fresh pool. v2 just settled two on-chain bidders (masked 1000+500 → revealed 700+300 → 280k/120k SBID claimed pro-rata → live post-settlement swap).
 Repo: github.com/Ridwannurudeen/liftoff
-Live: liftoff.gudman.xyz
+Live: sealedlaunch.gudman.xyz
 v1 Hook: oklink.com/xlayer/address/0x594B539591e51e7981b05126B7e4d869C3BaA880
 v2 Manager: oklink.com/xlayer/address/0xaeD6bd08CDBaD833312d6BCFd9F97954350F606e
 Demo: [VIDEO URL]

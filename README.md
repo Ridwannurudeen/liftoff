@@ -5,8 +5,8 @@
 Built for the OKX **Build X "Hook the Future"** hackathon, deployed against the **official Uniswap v4 PoolManager on X Layer mainnet** (`0x360E68faCcca8cA495c1B759Fd9EEe466db9FB32`).
 
 **Live:**
-- https://liftoff.gudman.xyz — the pitch + read-only auction state widget (no wallet, no backend).
-- https://liftoff.gudman.xyz/app — interactive launch lifecycle dApp: connect a wallet, paste any v2 launch + poolId (defaults to the mainnet demo), commit / reveal / settle / claim.
+- https://sealedlaunch.gudman.xyz — the pitch + read-only auction state widget (no wallet, no backend).
+- https://sealedlaunch.gudman.xyz/app — interactive launch lifecycle dApp: connect a wallet, paste any v2 launch + poolId (defaults to the mainnet demo), commit / reveal / settle / claim.
 
 ## Why this, and why X Layer specifically
 
