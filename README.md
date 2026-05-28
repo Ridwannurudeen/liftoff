@@ -82,11 +82,19 @@ PRIVATE_KEY=0x.. LAUNCH=0x.. POOL_ID=0x.. forge script script/SettleSealedLaunch
 
 The hook address is CREATE2-mined (`HookMiner`) so its low bits carry the permission flags (`0x2880`). Gas is paid in **OKB**.
 
-## v2 — Commit-Reveal sealed bids (shipped, not yet deployed)
+## v2 — Commit-Reveal sealed bids (live on X Layer mainnet, multi-bidder demo settled)
 
-`src/CommitRevealLaunch.sol` extends v1 with a hashed commit + masked deposit: bidders post `keccak256(amount, salt, bidder)` and escrow an upper-bound deposit; they reveal the real amount during a reveal window, with the overage refunded. The same `SealedLaunchHook` gates the pool. Bid sizes stay hidden on-chain until reveal, so the auction is now order-*independent* **and** size-sealed. 12 dedicated tests cover seal/reveal correctness, pro-rata on revealed bids, failed-launch refunds, and pool seeding at the clearing price.
+`src/CommitRevealLaunch.sol` extends v1 with a hashed commit + masked deposit: bidders post `keccak256(amount, salt, bidder)` and escrow an upper-bound deposit; they reveal the real amount during a reveal window, with the overage refunded. The same `SealedLaunchHook` gates the pool (reused across v1 and v2 pools). Bid sizes stay hidden on-chain until reveal, so the auction is now order-*independent* **and** size-sealed. 12 dedicated unit tests cover seal/reveal correctness, pro-rata on revealed bids, failed-launch refunds, and pool seeding at the clearing price.
 
-Live mainnet demo still runs through v1 (`SealedLaunch`); v2 is in-tree as the documented hardening path (Phase 2 of [`ROADMAP.md`](ROADMAP.md)).
+**Deployed + demonstrated on X Layer mainnet (chain 196):**
+
+| Contract | Address |
+|---|---|
+| CommitRevealLaunch (manager) | `0xaed6BD08CDBaD833312d6BcFd9F97954350F606e` |
+| dUSD2 (demo quote) | `0x632bdC371EF86b9238dE795aEE2babABE3A5A277` |
+| SBID (demo token) | `0xe39a3D775690C419f07A029d2423c74a74b86952` |
+
+Two on-chain bidders, asymmetric sealed bids: A masked 1000 dUSD2 / revealed 700, B masked 500 / revealed 300. Pro-rata claims (28:12 = 7:3) confirmed: A=280,000 SBID, B=120,000 SBID. Full lifecycle ran end-to-end on mainnet — both commits → both reveals (overages refunded) → settle at uniform clearing price → both claim → live post-settlement swap. Tx provenance in `broadcast/DeployCommitRevealDemo.s.sol/196/`, `broadcast/RevealCommitRevealDemo.s.sol/196/`, `broadcast/SettleCommitRevealDemo.s.sol/196/`.
 
 ## Honest scope notes
 

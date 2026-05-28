@@ -22,7 +22,7 @@ Fairness is a property of the mechanism, not a tunable parameter — provably un
 
 **Why it matters (market):** Every token launch needs anti-snipe. Sealed Launch is directly adoptable by X Layer launchpads — **flap.sh** (a hackathon co-initiator) has no anti-snipe today — and grows v4 pools, liquidity, real users and OKB gas on a chain whose v4 TVL is still tiny.
 
-**Verification / completion:** 62/62 Foundry tests, including a **live X Layer mainnet fork test**, plus a **real auction settled on mainnet**. The headline test proves a first-block buyer and a last-block buyer receive identical allocation and identical price per token. v2 commit-reveal (`src/CommitRevealLaunch.sol`, 12 dedicated tests) is shipped in-tree as the documented hardening path — bid sizes hidden via hashed commit + reveal — live demo still runs v1.
+**Verification / completion:** 62/62 Foundry tests, including a **live X Layer mainnet fork test**, plus a **real auction settled on mainnet**. The headline test proves a first-block buyer and a last-block buyer receive identical allocation and identical price per token. **v2 commit-reveal (`src/CommitRevealLaunch.sol`, 12 dedicated tests) is also deployed on X Layer mainnet** with a real two-bidder lifecycle settled on-chain (asymmetric sealed bids 1000/500 dUSD2 masked → 700/300 revealed → pro-rata 280k/120k SBID claimed → post-settlement swap).
 
 **Deployed + demonstrated on X Layer mainnet (chain 196, official Uniswap v4 PoolManager):**
 - **SealedLaunchHook:** `0x594B539591e51e7981b05126B7e4d869C3BaA880` — https://www.oklink.com/xlayer/address/0x594B539591e51e7981b05126B7e4d869C3BaA880
@@ -30,6 +30,12 @@ Fairness is a property of the mechanism, not a tunable parameter — provably un
 - **SEAL (demo token):** `0x9A758af7A7EAB7B7F038caC7AA6127d232fC159B` — https://www.oklink.com/xlayer/address/0x9A758af7A7EAB7B7F038caC7AA6127d232fC159B
 - **dUSD (demo quote):** `0x8FfBcEdbD23B128b2652a2a2786515DdEF131182` — https://www.oklink.com/xlayer/address/0x8FfBcEdbD23B128b2652a2a2786515DdEF131182
 - A real launch ran end-to-end: open auction → commit → settle at the uniform clearing price → seed LP → live swap. Verified on-chain: `isSettled = true`, pool liquidity `> 0`. Tx provenance in `broadcast/DeploySealedLaunch.s.sol/196/` and `broadcast/SettleSealedLaunch.s.sol/196/`.
+
+**v2 (CommitRevealLaunch) — also deployed on X Layer mainnet, multi-bidder lifecycle settled:**
+- **CommitRevealLaunch:** `0xaed6BD08CDBaD833312d6BcFd9F97954350F606e` — https://www.oklink.com/xlayer/address/0xaed6BD08CDBaD833312d6BcFd9F97954350F606e
+- **dUSD2 (demo quote):** `0x632bdC371EF86b9238dE795aEE2babABE3A5A277` — https://www.oklink.com/xlayer/address/0x632bdC371EF86b9238dE795aEE2babABE3A5A277
+- **SBID (demo token):** `0xe39a3D775690C419f07A029d2423c74a74b86952` — https://www.oklink.com/xlayer/address/0xe39a3D775690C419f07A029d2423c74a74b86952
+- Two distinct on-chain bidders posted sealed commits (masked 1000 + 500 dUSD2), revealed asymmetric real bids (700 + 300 dUSD2) during the reveal window, the auction cleared at one uniform price, both bidders claimed their pro-rata allocations (280,000 + 120,000 SBID), and a post-settlement swap traded the now-open pool. The masked deposits hide bid sizes on-chain until reveal — the auction is now order-independent **and** size-sealed. Tx provenance: `broadcast/DeployCommitRevealDemo.s.sol/196/`, `broadcast/RevealCommitRevealDemo.s.sol/196/`, `broadcast/SettleCommitRevealDemo.s.sol/196/`.
 
 **Links:**
 - Live site: https://liftoff.gudman.xyz (reads the deployed auction's state live from X Layer)
