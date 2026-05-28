@@ -17,6 +17,7 @@ import {CurrencySettler} from "@openzeppelin/uniswap-hooks/src/utils/CurrencySet
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {FixedPointMathLib} from "solmate/src/utils/FixedPointMathLib.sol";
 
 import {LaunchToken} from "./LaunchToken.sol";
@@ -29,7 +30,7 @@ import {SealedLaunchHook} from "./SealedLaunchHook.sol";
 /// commit order and block position are irrelevant, so unpredictable X Layer (flashblock) ordering buys no
 /// advantage. After settlement the pool is initialized at the clearing price, seeded with liquidity, and
 /// opened for normal trading. If the raise misses `minRaise`, no pool is created and commitments are refundable.
-contract SealedLaunch is IUnlockCallback {
+contract SealedLaunch is IUnlockCallback, ReentrancyGuard {
     using PoolIdLibrary for PoolKey;
     using BalanceDeltaLibrary for BalanceDelta;
     using StateLibrary for IPoolManager;
@@ -81,6 +82,8 @@ contract SealedLaunch is IUnlockCallback {
 
     /// @dev Transient: the PoolKey being seeded inside `unlockCallback`.
     PoolKey private _activeKey;
+    /// @dev Transient: quote consumed by LP seeding inside `unlockCallback`. Reset after settle.
+    uint256 private _quoteUsed;
 
     error AlreadyExists();
     error BadParams();
@@ -97,6 +100,7 @@ contract SealedLaunch is IUnlockCallback {
     error AlreadyClaimed();
     error NothingToClaim();
     error NothingToRefund();
+    error LpOverdraw();
 
     event LaunchCreated(PoolId indexed id, address indexed token, address indexed launcher, PoolKey key);
     event Committed(PoolId indexed id, address indexed user, uint256 amount, uint256 totalCommitted);
@@ -116,6 +120,9 @@ contract SealedLaunch is IUnlockCallback {
         if (p.offeredTokens == 0 || p.lpTokens == 0) revert BadParams();
         if (p.totalSupply < p.offeredTokens + p.lpTokens) revert BadParams();
         if (p.endTime <= p.startTime) revert BadParams();
+        // tickSpacing must be in v4 bounds (TickMath.MIN_TICK_SPACING..MAX_TICK_SPACING). Reject 0 (would cause
+        // division-by-zero in TickMath.minUsableTick during settle) and out-of-range values up front.
+        if (p.tickSpacing <= 0 || p.tickSpacing > 32767) revert BadParams();
 
         // Full supply minted to this contract: it distributes to bidders (claim), seeds the LP, and sends
         // any remainder to the launcher at settlement.
@@ -155,7 +162,7 @@ contract SealedLaunch is IUnlockCallback {
 
     /// @notice Commit `amount` of quote to a launch. Pro-rata of the offered tokens is what you receive at
     /// settlement; order and block position are irrelevant.
-    function commit(PoolId id, uint256 amount) external {
+    function commit(PoolId id, uint256 amount) external nonReentrant {
         Launch storage l = launches[id];
         if (l.token == address(0)) revert LaunchNotFound();
         if (amount == 0) revert ZeroAmount();
@@ -174,7 +181,7 @@ contract SealedLaunch is IUnlockCallback {
 
     /// @notice Close the auction. If the raise missed `minRaise`, the launch fails and commitments become
     /// refundable. Otherwise the pool is initialized at the clearing price, seeded with LP, and opened.
-    function settle(PoolId id) external {
+    function settle(PoolId id) external nonReentrant {
         Launch storage l = launches[id];
         if (l.token == address(0)) revert LaunchNotFound();
         if (l.settled) revert AlreadySettled();
@@ -195,22 +202,48 @@ contract SealedLaunch is IUnlockCallback {
         uint160 sqrtPriceX96 = l.tokenIsCurrency0
             ? _sqrtPriceX96(l.totalCommitted, l.offeredTokens) // price = quote/token = P
             : _sqrtPriceX96(l.offeredTokens, l.totalCommitted); // price = token/quote = 1/P
-        l.clearingSqrtPriceX96 = sqrtPriceX96;
+
+        // Validate the clearing price is in v4 tick bounds before handing it to PoolManager.initialize. If
+        // out of range, mark the launch failed so committers can reclaim (instead of bricking settle).
+        if (sqrtPriceX96 < TickMath.MIN_SQRT_PRICE || sqrtPriceX96 >= TickMath.MAX_SQRT_PRICE) {
+            l.failed = true;
+            emit LaunchFailedEvent(id, l.totalCommitted);
+            return;
+        }
 
         PoolKey memory key = _keyOf(l);
-        poolManager.initialize(key, sqrtPriceX96);
+        // Defense-in-depth: if PoolManager.initialize reverts for any reason (extreme tickSpacing/price
+        // combinations the launcher chose, hook gate, etc.), mark the launch failed and unlock reclaim
+        // instead of permanently bricking settle.
+        try poolManager.initialize(key, sqrtPriceX96) returns (int24) {
+            // continue below
+        } catch {
+            l.failed = true;
+            emit LaunchFailedEvent(id, l.totalCommitted);
+            return;
+        }
+
+        l.clearingSqrtPriceX96 = sqrtPriceX96;
 
         // Seed full-range liquidity from the lpTokens side; the matching quote is whatever the pool requires
         // at the clearing price, pulled from this contract's balance inside the callback.
         _activeKey = key;
+        _quoteUsed = 0;
         poolManager.unlock(abi.encode(sqrtPriceX96));
+        uint256 quoteUsed = _quoteUsed;
         delete _activeKey;
+        _quoteUsed = 0;
+
+        // LP seeding must never consume more quote than this launch raised — otherwise it would be eating
+        // another launch's escrow held by the same manager. Hard-stop if it tried to.
+        if (quoteUsed > l.totalCommitted) revert LpOverdraw();
 
         hook.markSettled(id);
 
-        // Forward all raised quote not consumed by LP seeding to the launcher.
-        uint256 quoteLeft = IERC20(Currency.unwrap(l.quote)).balanceOf(address(this));
-        if (quoteLeft != 0) IERC20(Currency.unwrap(l.quote)).safeTransfer(l.launcher, quoteLeft);
+        // Pay the launcher exactly the raised quote not consumed by LP seeding (NOT the contract's full
+        // quote balance — that would sweep escrow from other in-flight launches sharing this manager).
+        uint256 launcherProceeds = l.totalCommitted - quoteUsed;
+        if (launcherProceeds != 0) IERC20(Currency.unwrap(l.quote)).safeTransfer(l.launcher, launcherProceeds);
 
         // Send any token remainder (totalSupply - offeredTokens - lpTokens, plus LP-seeding dust) to launcher.
         uint256 tokenLeft = IERC20(l.token).balanceOf(address(this)) - l.offeredTokens;
@@ -253,11 +286,17 @@ contract SealedLaunch is IUnlockCallback {
         if (d0 > 0) key.currency0.take(poolManager, address(this), uint256(d0), false);
         if (d1 > 0) key.currency1.take(poolManager, address(this), uint256(d1), false);
 
+        // Record how much QUOTE the seeding consumed so settle() pays the launcher the exact remainder
+        // (rather than sweeping the contract balance, which would drain other in-flight launches).
+        bool quoteIsC0 = !l.tokenIsCurrency0;
+        int256 quoteDelta = quoteIsC0 ? d0 : d1;
+        _quoteUsed = quoteDelta < 0 ? uint256(-quoteDelta) : 0;
+
         return "";
     }
 
     /// @notice Claim your pro-rata token allocation after a successful settlement.
-    function claim(PoolId id) external {
+    function claim(PoolId id) external nonReentrant {
         Launch storage l = launches[id];
         if (l.token == address(0)) revert LaunchNotFound();
         if (!l.settled) revert NotSettled();
@@ -275,7 +314,7 @@ contract SealedLaunch is IUnlockCallback {
     }
 
     /// @notice Reclaim your committed quote after a failed launch.
-    function refund(PoolId id) external {
+    function refund(PoolId id) external nonReentrant {
         Launch storage l = launches[id];
         if (l.token == address(0)) revert LaunchNotFound();
         if (!l.failed) revert LaunchSucceeded();

@@ -3,17 +3,17 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Sealed Launch — order-independent fair-launch hook for Uniswap v4 on X Layer</title>
-  <meta name="description" content="Sealed Launch is a Uniswap v4 hook that launches tokens through a sealed, uniform-price batch auction on X Layer — being first, or paying to be first, buys no advantage." />
-  <meta property="og:title" content="Sealed Launch — un-snipeable token launches on X Layer" />
-  <meta property="og:description" content="A sealed, uniform-price batch auction inside a Uniswap v4 hook. Everyone clears at one price. Order doesn't matter." />
+  <title>Sealed Launch — sealed batch-auction launch hook for Uniswap v4 on X Layer</title>
+  <meta name="description" content="Sealed Launch is a sealed batch-auction launch hook for Uniswap v4 on X Layer. Order doesn't matter. One uniform price. Being first — or paying to be first — buys you nothing." />
+  <meta property="og:title" content="Sealed Launch — order doesn't matter. One uniform price." />
+  <meta property="og:description" content="A sealed batch-auction launch hook for Uniswap v4 on X Layer. Commit → reveal → settle → claim. Everyone clears at one price." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://liftoff.gudman.xyz/" />
   <meta property="og:image" content="https://liftoff.gudman.xyz/og-image.svg" />
   <meta property="og:site_name" content="Sealed Launch" />
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="Sealed Launch — un-snipeable token launches on X Layer" />
-  <meta name="twitter:description" content="A sealed, uniform-price batch auction inside a Uniswap v4 hook. Everyone clears at one price. Order doesn't matter." />
+  <meta name="twitter:title" content="Sealed Launch — order doesn't matter. One uniform price." />
+  <meta name="twitter:description" content="A sealed batch-auction launch hook for Uniswap v4 on X Layer. Commit → reveal → settle → claim." />
   <meta name="twitter:image" content="https://liftoff.gudman.xyz/og-image.svg" />
   <meta name="theme-color" content="#06070d" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -31,103 +31,293 @@
     </a>
     <nav class="nav-links">
       <a href="#how">How it works</a>
-      <a href="#why">Why X Layer</a>
-      <a href="#live">Live</a>
+      <a href="#architecture">Architecture</a>
       <a href="#contracts">Contracts</a>
-      <a class="nav-cta" href="https://github.com/Ridwannurudeen/liftoff" target="_blank" rel="noopener">GitHub</a>
+      <a href="#audit">Audit</a>
+      <a href="#roadmap">Roadmap</a>
+      <a class="nav-link-muted" href="https://github.com/Ridwannurudeen/liftoff" target="_blank" rel="noopener" aria-label="GitHub">GitHub ↗</a>
+      <a class="nav-cta" href="/app">Open the dApp →</a>
     </nav>
   </header>
 
   <main id="top">
     <section class="hero">
       <p class="eyebrow">OKX Build X · Hook the Future · Uniswap v4 on X Layer</p>
-      <h1>A token launch where being <span class="grad">first</span> is worthless.</h1>
-      <p class="sub">Sealed Launch is a Uniswap v4 hook that launches a token through a sealed, uniform-price batch auction. Swaps are blocked during the window; everyone clears at <strong>one price</strong>, pro-rata. Snipers can't pay their way to the front, because there is no front.</p>
+      <h1>Order doesn't matter. <span class="grad">One uniform price.</span></h1>
+      <p class="sub">A sealed batch-auction launch hook for Uniswap v4 on X Layer. Bids are sealed during the window; everyone clears at one price, pro-rata. Snipers can't pay their way to the front, because there is no front.</p>
       <div class="hero-cta">
-        <a class="btn primary" href="#live">See a real auction, live</a>
-        <a class="btn ghost" href="https://www.oklink.com/xlayer/address/0x594B539591e51e7981b05126B7e4d869C3BaA880" target="_blank" rel="noopener">View hook on OKLink ↗</a>
+        <a class="btn primary" href="/app">Open the dApp</a>
+        <a class="btn ghost" href="#architecture">Read the spec</a>
       </div>
       <div class="hero-badges">
-        <span class="badge">Official Uniswap v4 PoolManager</span>
-        <span class="badge">X Layer mainnet · chain 196</span>
-        <span class="badge">50/50 tests · settled live on mainnet</span>
+        <span class="badge">Live on X Layer mainnet · chain 196</span>
+        <span class="badge">62 / 62 Foundry tests</span>
+        <span class="badge">Settled demo · 1,000 dUSD2 cleared · 400k SBID distributed</span>
+      </div>
+    </section>
+
+    <section id="problem" class="problem">
+      <h2>Every token launch gets sniped.</h2>
+      <p class="section-sub">Whoever orders the trade first, or pays the most to be ordered first, walks away with the cheap supply. Retail eats the markup. That's the default.</p>
+
+      <div class="prose">
+        <h3>Every existing defense still rewards the fastest.</h3>
+        <ul class="bullets">
+          <li><strong>Fee decay</strong> — launches start at a high fee that drops over time. The fastest wallet still wins; it just pays a tax to do it.</li>
+          <li><strong>Dutch auctions</strong> — price falls from a ceiling. The first acceptable bid clears. Block ordering decides who that is.</li>
+          <li><strong>Fixed-price windows</strong> — first wallet to commit wins the allocation. Pure speed competition.</li>
+          <li><strong>Priority-fee MEV taxes</strong> — work only on chains that order transactions by priority fee. X Layer doesn't.</li>
+        </ul>
+
+        <h3>The X Layer angle</h3>
+        <p>In December 2025 X Layer migrated to the OP Stack and runs a <strong>flashblocks</strong> sequencer. We tested real mainnet blocks: transactions are <em>not</em> ordered by priority fee, and block-level ordering is effectively unpredictable. That breaks the priority-fee MEV-tax designs, and there's no general-purpose price oracle live on X Layer to power LVR-aware AMMs.</p>
+
+        <p class="wedge"><strong>Sealed Launch doesn't fight ordering. It makes ordering irrelevant.</strong></p>
       </div>
     </section>
 
     <section id="how" class="how">
-      <h2>Order in, order out — it doesn't matter.</h2>
-      <div class="cards">
+      <h2>How it works</h2>
+      <p class="section-sub">Four phases. One price. Everyone clears the same.</p>
+      <div class="cards steps">
         <article class="card">
-          <div class="card-num">01</div>
-          <h3>Swaps blocked</h3>
-          <p>During the launch window the hook reverts every swap. Nobody can trade the token before it clears — there's nothing to snipe.</p>
+          <div class="step-num">01</div>
+          <h3>Commit</h3>
+          <p>Bidders post a hashed commitment <code>keccak256(amount, salt, bidder)</code> and escrow a masked deposit. The pool is gated; nobody can trade.</p>
         </article>
         <article class="card">
-          <div class="card-num">02</div>
-          <h3>Everyone commits</h3>
-          <p>Buyers deposit quote tokens as commitments. Your block, your position, your gas — none of it changes your outcome.</p>
+          <div class="step-num">02</div>
+          <h3>Reveal</h3>
+          <p>Bidders open their bid by revealing the real amount + salt. The overage refunds atomically. Bid sizes appear on-chain only here.</p>
         </article>
         <article class="card">
-          <div class="card-num">03</div>
-          <h3>One clearing price</h3>
-          <p>At window close the auction settles at a single uniform price. Allocation = <code>offered × yourCommit / total</code>. The first-block buyer and the last-block buyer pay the same.</p>
+          <div class="step-num">03</div>
+          <h3>Settle</h3>
+          <p>Anyone calls <code>settle()</code>. The auction clears at one uniform price <code>P = totalRevealed / offeredTokens</code>, the pool seeds full-range LP at that price, trading opens.</p>
         </article>
         <article class="card">
-          <div class="card-num">04</div>
-          <h3>Pool opens</h3>
-          <p>Settlement initializes the v4 pool <em>at</em> the clearing price, seeds liquidity, and opens trading. A missed minimum raise refunds everyone.</p>
+          <div class="step-num">04</div>
+          <h3>Claim</h3>
+          <p>Every revealer claims their pro-rata token allocation. Non-revealers reclaim their masked deposit. First-block and last-block buyers walk away with the identical price.</p>
         </article>
+      </div>
+      <p class="truth">Fairness is a property of the mechanism, not a tunable parameter.</p>
+    </section>
+
+    <section id="versions" class="versions">
+      <h2>v1 vs v2</h2>
+      <p class="section-sub">Two managers, one shared hook. v2 adds size-sealed bids on top of v1's clearing.</p>
+      <div class="vs-table" role="table">
+        <div class="vs-row vs-head" role="row">
+          <div role="columnheader"></div>
+          <div role="columnheader">v1 — SealedLaunch</div>
+          <div role="columnheader">v2 — CommitRevealLaunch</div>
+        </div>
+        <div class="vs-row" role="row">
+          <div role="rowheader">Order-independent</div>
+          <div class="vs-yes" role="cell">✓</div>
+          <div class="vs-yes" role="cell">✓</div>
+        </div>
+        <div class="vs-row" role="row">
+          <div role="rowheader">Bid sizes sealed on-chain</div>
+          <div class="vs-no" role="cell">—</div>
+          <div class="vs-yes" role="cell">✓</div>
+        </div>
+        <div class="vs-row" role="row">
+          <div role="rowheader">Settlement</div>
+          <div role="cell">uniform price</div>
+          <div role="cell">uniform price</div>
+        </div>
+        <div class="vs-row" role="row">
+          <div role="rowheader">Mechanism</div>
+          <div role="cell">direct commit</div>
+          <div role="cell">hashed commit + masked deposit + reveal</div>
+        </div>
+        <div class="vs-row" role="row">
+          <div role="rowheader">Deployed</div>
+          <div class="vs-yes" role="cell">mainnet</div>
+          <div class="vs-yes" role="cell">mainnet</div>
+        </div>
       </div>
     </section>
 
-    <section id="why" class="why">
-      <h2>Why this is built for X Layer</h2>
-      <p>In December 2025 X Layer moved to the <strong>OP Stack</strong> and runs a <strong>flashblocks</strong> sequencer. We tested real mainnet blocks: transactions are <em>not</em> ordered by priority fee — block ordering is effectively unpredictable. That breaks priority-fee "MEV-tax" hooks, and there's no general-purpose price oracle live on X Layer to power LVR-aware designs. So Sealed Launch doesn't fight ordering — it makes ordering <strong>irrelevant</strong>. A uniform-price batch auction is fair <em>by construction</em>. On a flashblock chain, it's the only launch that's provably un-snipeable — and it's directly adoptable by launchpads like <strong>flap.sh</strong>, which has no anti-snipe today.</p>
-    </section>
+    <section id="architecture" class="architecture">
+      <h2>Architecture</h2>
+      <p class="section-sub">Two managers, one gating hook, one ERC-20 per launch — all wired through the official Uniswap v4 PoolManager on X Layer.</p>
 
-    <section id="live" class="live">
-      <div class="live-head">
-        <h2>A real auction, settled live on mainnet</h2>
-        <span class="live-dot" id="liveDot" title="reading the chain">●</span>
+      <div class="cards arch-cards">
+        <article class="card">
+          <div class="step-num">HOOK</div>
+          <h3>SealedLaunchHook</h3>
+          <p>A v4 <code>BaseHook</code> with permission flags <code>beforeInitialize | beforeAddLiquidity | beforeSwap</code> (<code>0x2880</code>). Reverts every swap until <code>markSettled</code> is called. Blocks non-manager liquidity adds pre-settlement. Holds no funds; runs no price math. The hook is shared across v1 and v2 — same address gates every pool.</p>
+        </article>
+        <article class="card">
+          <div class="step-num">V1</div>
+          <h3>SealedLaunch <span class="muted">(v1 manager)</span></h3>
+          <p>Escrows commitments, clears at the uniform price <code>P = totalCommitted / offeredTokens</code>, seeds full-range LP via <code>poolManager.unlock → modifyLiquidity</code>, and opens trading. Misses <code>minRaise</code>? Everyone refunds.</p>
+        </article>
+        <article class="card">
+          <div class="step-num">V2</div>
+          <h3>CommitRevealLaunch <span class="muted">(v2 manager)</span></h3>
+          <p>Adds a hashed commit + masked deposit on top of v1's clearing. Bidders post <code>keccak256(amount, salt, bidder)</code> during the commit window, reveal the real amount during the reveal window (overage refunded), and settle at the uniform clearing price. Bid sizes stay hidden on-chain until reveal.</p>
+        </article>
+        <article class="card">
+          <div class="step-num">ERC-20</div>
+          <h3>LaunchToken</h3>
+          <p>A vanilla ERC-20 deployed per-launch by the manager. <code>offeredTokens</code> are distributed pro-rata to revealers at the clearing price; <code>lpTokens</code> are seeded into the v4 pool. Pre-mint goes nowhere a launcher can rug.</p>
+        </article>
       </div>
-      <p class="section-sub">Read straight from the deployed <strong>SEAL</strong> launch on X Layer — no wallet, no backend. A real batch auction ran end-to-end: commit → settle at one price → seed liquidity → trade.</p>
-      <div class="stats" id="stats">
-        <div class="stat">
-          <div class="stat-label">Auction status</div>
-          <div class="stat-value" id="statStatus">…</div>
-        </div>
-        <div class="stat">
-          <div class="stat-label">Total committed</div>
-          <div class="stat-value" id="statCommitted">…</div>
-        </div>
-        <div class="stat">
-          <div class="stat-label">Clearing price</div>
-          <div class="stat-value" id="statPrice">…</div>
-        </div>
-        <div class="stat">
-          <div class="stat-label">Pool liquidity</div>
-          <div class="stat-value" id="statLiquidity">…</div>
-        </div>
-      </div>
-      <p class="live-note" id="liveNote">Querying the hook and the v4 pool on X Layer…</p>
+
+      <p class="arch-note">All managers initialize their pools against the <strong>official Uniswap v4 PoolManager on X Layer</strong> at <code>0x360E68faCcca8cA495c1B759Fd9EEe466db9FB32</code>. The hook address is CREATE2-mined so its low bits carry the required permission flags.</p>
     </section>
 
     <section id="contracts" class="contracts">
-      <h2>Deployed on X Layer mainnet</h2>
-      <p class="section-sub">Chain 196, against the official Uniswap v4 PoolManager. A real launch settled on-chain.</p>
+      <h2>Live contracts on X Layer mainnet</h2>
+      <p class="section-sub">Chain 196. The v2 demo settled end-to-end on-chain — read the state of that demo, live, below.</p>
+
       <div class="contract-table">
+        <a class="contract-row" href="https://www.oklink.com/xlayer/address/0xaeD6bd08CDBaD833312d6BCFd9F97954350F606e" target="_blank" rel="noopener">
+          <span class="c-name">v2 CommitRevealLaunch</span><span class="c-addr">0xaeD6bd08CDBaD833312d6BCFd9F97954350F606e</span><span class="c-go">↗</span>
+        </a>
+        <a class="contract-row" href="https://www.oklink.com/xlayer/address/0xd6a240183eea10cd74f9911FE3f7717c90564B8C" target="_blank" rel="noopener">
+          <span class="c-name">v1 SealedLaunch</span><span class="c-addr">0xd6a240183eea10cd74f9911FE3f7717c90564B8C</span><span class="c-go">↗</span>
+        </a>
         <a class="contract-row" href="https://www.oklink.com/xlayer/address/0x594B539591e51e7981b05126B7e4d869C3BaA880" target="_blank" rel="noopener">
           <span class="c-name">SealedLaunchHook</span><span class="c-addr">0x594B539591e51e7981b05126B7e4d869C3BaA880</span><span class="c-go">↗</span>
         </a>
-        <a class="contract-row" href="https://www.oklink.com/xlayer/address/0xd6a240183eea10cd74f9911FE3f7717c90564B8C" target="_blank" rel="noopener">
-          <span class="c-name">SealedLaunch (manager)</span><span class="c-addr">0xd6a240183eea10cd74f9911FE3f7717c90564B8C</span><span class="c-go">↗</span>
+        <a class="contract-row" href="https://www.oklink.com/xlayer/address/0x360E68faCcca8cA495c1B759Fd9EEe466db9FB32" target="_blank" rel="noopener">
+          <span class="c-name">v4 PoolManager (official)</span><span class="c-addr">0x360E68faCcca8cA495c1B759Fd9EEe466db9FB32</span><span class="c-go">↗</span>
         </a>
-        <a class="contract-row" href="https://www.oklink.com/xlayer/address/0x9A758af7A7EAB7B7F038caC7AA6127d232fC159B" target="_blank" rel="noopener">
-          <span class="c-name">SEAL demo token</span><span class="c-addr">0x9A758af7A7EAB7B7F038caC7AA6127d232fC159B</span><span class="c-go">↗</span>
+        <a class="contract-row" href="https://www.oklink.com/xlayer/tx-list?address=0xaeD6bd08CDBaD833312d6BCFd9F97954350F606e" target="_blank" rel="noopener">
+          <span class="c-name">v2 demo auction (settled)</span><span class="c-addr">poolId 0x33bd0be4…686cca</span><span class="c-go">↗</span>
         </a>
-        <a class="contract-row" href="https://www.oklink.com/xlayer/address/0x8FfBcEdbD23B128b2652a2a2786515DdEF131182" target="_blank" rel="noopener">
-          <span class="c-name">dUSD quote token</span><span class="c-addr">0x8FfBcEdbD23B128b2652a2a2786515DdEF131182</span><span class="c-go">↗</span>
-        </a>
+      </div>
+
+      <div class="live-wrap">
+        <div class="live-head">
+          <h3 class="live-h">Live state — v2 demo</h3>
+          <span class="live-dot" id="liveDot" title="reading the chain">●</span>
+        </div>
+        <p class="section-sub">Read straight from the deployed v2 manager + the v4 pool. No wallet, no backend.</p>
+        <div class="stats" id="stats">
+          <div class="stat">
+            <div class="stat-label">Auction status</div>
+            <div class="stat-value" id="statStatus">…</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Total revealed</div>
+            <div class="stat-value" id="statCommitted">…</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Clearing price</div>
+            <div class="stat-value" id="statPrice">…</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Pool liquidity</div>
+            <div class="stat-value" id="statLiquidity">…</div>
+          </div>
+        </div>
+        <p class="live-note" id="liveNote">Querying the v2 manager and the v4 pool on X Layer…</p>
+      </div>
+    </section>
+
+    <section id="try" class="try">
+      <h2>Try it</h2>
+      <p class="section-sub">A read-only viewer for the mainnet demo, or open a brand-new launch with your own params.</p>
+      <div class="cards try-cards">
+        <article class="card try-card">
+          <h3>Lifecycle viewer</h3>
+          <p>Drive any auction's lifecycle from a single URL: commit, reveal, settle, claim. Defaults to the mainnet demo.</p>
+          <a class="btn primary try-btn" href="/app">Open <span aria-hidden="true">→</span></a>
+        </article>
+        <article class="card try-card">
+          <h3>Create a launch</h3>
+          <p>Deploy a fresh ERC-20 and open a CommitRevealLaunch pool in one transaction, with your own window, raise, and tick spacing.</p>
+          <a class="btn ghost try-btn" href="/app/create">Create <span aria-hidden="true">→</span></a>
+        </article>
+      </div>
+      <ul class="try-bullets">
+        <li>Connect a wallet, mint demo dUSD2 from the in-app faucet.</li>
+        <li>Open a new auction with your own params.</li>
+        <li>Drive any auction's lifecycle from one URL.</li>
+      </ul>
+    </section>
+
+    <section id="audit" class="audit">
+      <h2>Internal security audit <span class="muted">(2026-05-28)</span></h2>
+      <p class="section-sub">Honest, full disclosure. We audited 61 findings across contracts, SDK, frontend and Foundry scripts on the day of submission.</p>
+
+      <div class="audit-grid">
+        <article class="card audit-card audit-ok">
+          <h3>Patched in this commit</h3>
+          <p><strong>Frontend, SDK, scripts.</strong></p>
+          <ul class="bullets">
+            <li><code>KNOWN_LAUNCHES</code> allowlist for <code>?launch=</code> URLs + opt-in ack.</li>
+            <li><code>chain-id == 196</code> assertions on every mainnet script.</li>
+            <li><code>resolveChain(ctx)</code> throws on missing chain (no wrong-chain broadcasts).</li>
+            <li><code>deriveSalt</code> normalizes salt input to NFC.</li>
+            <li>New <code>hasCommitted(b)</code> helper, faucet cooldown + amount cap, <code>QuoteFaucet</code> chain-gated.</li>
+          </ul>
+        </article>
+
+        <article class="card audit-card audit-warn">
+          <h3>Disclosed as known v1.0 limits</h3>
+          <p><strong>Two CRITICAL contract findings.</strong> The deployed addresses can't be patched in place; mitigated today because only the demo runs on the deployed managers.</p>
+          <ul class="bullets">
+            <li><strong>C-1</strong> — <code>SealedLaunch.settle()</code> uses a <code>balanceOf</code> sweep; drains other launches' escrow if multiple launches share the same manager + quote.</li>
+            <li><strong>C-2</strong> — <code>CommitRevealLaunch</code> LP can over-consume the shared quote balance: no <code>quoteUsed &lt;= totalRevealed</code> bound, no <code>tickSpacing</code> / <code>sqrtPrice</code> bounds.</li>
+          </ul>
+        </article>
+
+        <article class="card audit-card audit-plan">
+          <h3>v1.1 fix plan</h3>
+          <ul class="bullets">
+            <li>Per-launch quote accounting (no <code>balanceOf</code> sweep).</li>
+            <li><code>nonReentrant</code> on every external state-changing function.</li>
+            <li><code>SealedLaunchHook.configure</code> restricted to a manager allowlist.</li>
+            <li><code>require(quoteUsed &lt;= totalRevealed)</code> invariant, plus <code>tickSpacing</code> / <code>sqrtPrice</code> bounds.</li>
+            <li>Full v1.1 redeploy to fresh mainnet addresses; v1.0 stays on-chain as historical proof.</li>
+          </ul>
+        </article>
+      </div>
+
+      <p class="audit-link">Full findings, severity breakdown and per-file references in the README — see <a href="https://github.com/Ridwannurudeen/liftoff#internal-security-audit-2026-05-28--disclosed-findings" target="_blank" rel="noopener">Internal security audit (2026-05-28)</a>.</p>
+    </section>
+
+    <section id="roadmap" class="roadmap">
+      <h2>Roadmap</h2>
+      <p class="section-sub">From a hackathon hook to the fair-issuance rail.</p>
+      <div class="cards road-cards">
+        <article class="card road-card">
+          <div class="step-num">PHASE 0</div>
+          <h3>Built ✓</h3>
+          <p>62/62 Foundry tests, v1 + v2 deployed to X Layer mainnet, real auction settled on-chain.</p>
+        </article>
+        <article class="card road-card">
+          <div class="step-num">PHASE 1</div>
+          <h3>Win the hackathon</h3>
+          <p>Demo video, submission, multi-bidder live demo with on-chain pro-rata fairness.</p>
+        </article>
+        <article class="card road-card">
+          <div class="step-num">PHASE 2</div>
+          <h3>Hook → product</h3>
+          <p>SDK, hosted dApp, commit-reveal v2, fee routing in OKB, third-party audit.</p>
+        </article>
+        <article class="card road-card">
+          <div class="step-num">PHASE 3</div>
+          <h3>X Layer launch standard</h3>
+          <p>flap partnership, launchpad-as-a-service, fairness reputation, OKX integration.</p>
+        </article>
+        <article class="card road-card">
+          <div class="step-num">PHASE 4</div>
+          <h3>Smarter auctions + multi-chain</h3>
+          <p>Tiered / Dutch curves, allowlist + KYC gates, deploy on every chain with official v4.</p>
+        </article>
+        <article class="card road-card">
+          <div class="step-num">PHASE 5</div>
+          <h3>Fair-issuance rail / EIP</h3>
+          <p>Open standard for on-chain launch covenants; the default way a token comes to market.</p>
+        </article>
       </div>
     </section>
   </main>
@@ -137,6 +327,8 @@
     <p>Built for the OKX <strong>Build X — Hook the Future</strong> hackathon. Uniswap v4 · X Layer · flap.sh. Evolved from the <strong>Liftoff</strong> v1 hook.</p>
     <div class="foot-links">
       <a href="https://github.com/Ridwannurudeen/liftoff" target="_blank" rel="noopener">GitHub</a>
+      <a href="/app">Live dApp</a>
+      <a href="https://dorahacks.io/hackathon/buildx-hook-the-future/" target="_blank" rel="noopener">The X Cup</a>
       <a href="https://www.oklink.com/xlayer/address/0x594B539591e51e7981b05126B7e4d869C3BaA880" target="_blank" rel="noopener">OKLink</a>
     </div>
   </footer>

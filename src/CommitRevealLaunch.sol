@@ -16,6 +16,7 @@ import {CurrencySettler} from "@openzeppelin/uniswap-hooks/src/utils/CurrencySet
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {FixedPointMathLib} from "solmate/src/utils/FixedPointMathLib.sol";
 
 import {LaunchToken} from "./LaunchToken.sol";
@@ -32,7 +33,7 @@ import {SealedLaunchHook} from "./SealedLaunchHook.sol";
 /// until they reveal (overage refunded, `amount` retained) or, post-settle, reclaim it (no reveal → no
 /// allocation). The "free option" of committing then not revealing if the price turns unfavorable is a known
 /// trade-off (no reveal forfeiture); see ROADMAP.
-contract CommitRevealLaunch is IUnlockCallback {
+contract CommitRevealLaunch is IUnlockCallback, ReentrancyGuard {
     using PoolIdLibrary for PoolKey;
     using BalanceDeltaLibrary for BalanceDelta;
     using CurrencySettler for Currency;
@@ -112,6 +113,7 @@ contract CommitRevealLaunch is IUnlockCallback {
     error LaunchSucceeded();
     error AlreadySettledOut();
     error NothingToClaim();
+    error LpOverdraw();
 
     event LaunchCreated(PoolId indexed id, address indexed token, address indexed launcher, PoolKey key);
     event Committed(PoolId indexed id, address indexed user, uint256 masked);
@@ -136,6 +138,9 @@ contract CommitRevealLaunch is IUnlockCallback {
         if (p.offeredTokens == 0 || p.lpTokens == 0) revert BadParams();
         if (p.totalSupply < p.offeredTokens + p.lpTokens) revert BadParams();
         if (!(p.startTime < p.commitEnd && p.commitEnd < p.revealEnd)) revert BadParams();
+        // tickSpacing must be in v4 bounds (TickMath.MIN_TICK_SPACING..MAX_TICK_SPACING). Reject 0 (would
+        // cause division-by-zero in TickMath.minUsableTick during settle) and out-of-range values up front.
+        if (p.tickSpacing <= 0 || p.tickSpacing > 32767) revert BadParams();
 
         token = address(new LaunchToken(p.name, p.symbol, p.totalSupply, address(this)));
 
@@ -174,7 +179,7 @@ contract CommitRevealLaunch is IUnlockCallback {
 
     /// @notice Commit a sealed bid: post `commitment` and escrow `masked` quote (an upper bound on your bid).
     /// One commit per wallet. Reveal later with the real amount + salt.
-    function commit(PoolId id, bytes32 commitment, uint256 masked) external {
+    function commit(PoolId id, bytes32 commitment, uint256 masked) external nonReentrant {
         Launch storage l = launches[id];
         if (l.token == address(0)) revert LaunchNotFound();
         if (commitment == bytes32(0)) revert ZeroCommitment();
@@ -194,7 +199,7 @@ contract CommitRevealLaunch is IUnlockCallback {
 
     /// @notice Reveal your real bid. Verifies the commitment, records `amount` as your bid, and refunds the
     /// masked overage (`masked - amount`). `amount` may be 0 to withdraw fully with no allocation.
-    function reveal(PoolId id, uint256 amount, bytes32 salt) external {
+    function reveal(PoolId id, uint256 amount, bytes32 salt) external nonReentrant {
         Launch storage l = launches[id];
         if (l.token == address(0)) revert LaunchNotFound();
         if (block.timestamp <= l.commitEnd || block.timestamp > l.revealEnd) revert NotInRevealWindow();
@@ -217,7 +222,7 @@ contract CommitRevealLaunch is IUnlockCallback {
 
     /// @notice Close the auction after the reveal window. Clears at the uniform price on revealed bids, seeds
     /// the pool, and opens trading — or fails if revealed raise < minRaise (everyone reclaims).
-    function settle(PoolId id) external {
+    function settle(PoolId id) external nonReentrant {
         Launch storage l = launches[id];
         if (l.token == address(0)) revert LaunchNotFound();
         if (l.settled) revert AlreadySettled();
@@ -234,10 +239,28 @@ contract CommitRevealLaunch is IUnlockCallback {
         uint160 sqrtPriceX96 = l.tokenIsCurrency0
             ? _sqrtPriceX96(l.totalRevealed, l.offeredTokens)
             : _sqrtPriceX96(l.offeredTokens, l.totalRevealed);
-        l.clearingSqrtPriceX96 = sqrtPriceX96;
+
+        // Validate the clearing price is in v4 tick bounds before handing it to PoolManager.initialize. If
+        // out of range, mark the launch failed so committers can reclaim (instead of bricking settle).
+        if (sqrtPriceX96 < TickMath.MIN_SQRT_PRICE || sqrtPriceX96 >= TickMath.MAX_SQRT_PRICE) {
+            l.failed = true;
+            emit LaunchFailedEvent(id, l.totalRevealed);
+            return;
+        }
 
         PoolKey memory key = _keyOf(l);
-        poolManager.initialize(key, sqrtPriceX96);
+        // Defense-in-depth: if PoolManager.initialize reverts for any reason (extreme tickSpacing/price
+        // combinations the launcher chose, hook gate, etc.), mark the launch failed and unlock reclaim
+        // instead of permanently bricking settle.
+        try poolManager.initialize(key, sqrtPriceX96) returns (int24) {
+            // continue below
+        } catch {
+            l.failed = true;
+            emit LaunchFailedEvent(id, l.totalRevealed);
+            return;
+        }
+
+        l.clearingSqrtPriceX96 = sqrtPriceX96;
 
         _activeId = id;
         _quoteUsed = 0;
@@ -246,11 +269,16 @@ contract CommitRevealLaunch is IUnlockCallback {
         _activeId = PoolId.wrap(bytes32(0));
         _quoteUsed = 0;
 
+        // LP seeding must never consume more quote than this launch revealed — otherwise extreme
+        // lpTokens/offeredTokens or out-of-range price math would let it eat other launches' escrow held
+        // by the same manager.
+        if (quoteUsed > l.totalRevealed) revert LpOverdraw();
+
         hook.markSettled(id);
 
         // Pay the launcher the revealed raise minus what LP seeding consumed. Unrevealed masked deposits stay
         // escrowed for their owners to reclaim — do NOT sweep the whole balance.
-        uint256 launcherProceeds = l.totalRevealed > quoteUsed ? l.totalRevealed - quoteUsed : 0;
+        uint256 launcherProceeds = l.totalRevealed - quoteUsed;
         if (launcherProceeds != 0) IERC20(Currency.unwrap(l.quote)).safeTransfer(l.launcher, launcherProceeds);
 
         uint256 tokenLeft = IERC20(l.token).balanceOf(address(this)) - l.offeredTokens;
@@ -301,7 +329,7 @@ contract CommitRevealLaunch is IUnlockCallback {
     }
 
     /// @notice Claim your pro-rata token allocation after a successful settlement (revealers only).
-    function claim(PoolId id) external {
+    function claim(PoolId id) external nonReentrant {
         Launch storage l = launches[id];
         if (l.token == address(0)) revert LaunchNotFound();
         if (!l.settled) revert NotSettled();
@@ -320,7 +348,7 @@ contract CommitRevealLaunch is IUnlockCallback {
 
     /// @notice Reclaim escrow when you get no allocation: after a successful settle if you never revealed
     /// (returns your masked deposit), or after a failed launch (returns revealed bid, else masked deposit).
-    function reclaim(PoolId id) external {
+    function reclaim(PoolId id) external nonReentrant {
         Launch storage l = launches[id];
         if (l.token == address(0)) revert LaunchNotFound();
         if (!l.settled) revert NotSettled();

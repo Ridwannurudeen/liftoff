@@ -59,10 +59,11 @@ contract SealedLaunchTest is BaseTest {
             uint160(Hooks.BEFORE_INITIALIZE_FLAG | Hooks.BEFORE_ADD_LIQUIDITY_FLAG | Hooks.BEFORE_SWAP_FLAG)
                 ^ (0x4444 << 144)
         );
-        deployCodeTo("SealedLaunchHook.sol:SealedLaunchHook", abi.encode(poolManager), flags);
+        deployCodeTo("SealedLaunchHook.sol:SealedLaunchHook", abi.encode(poolManager, address(this)), flags);
         hook = SealedLaunchHook(flags);
 
         launch = new SealedLaunch(poolManager, hook);
+        hook.setManagerAllowed(address(launch), true);
 
         quote = new MockERC20("Quote", "Q", 18);
         quote.mint(address(this), 1_000_000 ether); // for post-settlement trading from the test contract
@@ -496,5 +497,257 @@ contract SealedLaunchTest is BaseTest {
                 tickSpacing: spacing
             })
         );
+    }
+
+    // ============================================================
+    // v1.1 hardening — fixes #1, #3, #4, #9
+    // ============================================================
+
+    address launcherA = makeAddr("launcherA");
+    address launcherB = makeAddr("launcherB");
+
+    /// @dev Finding #1: pre-v1.1 settle swept `quote.balanceOf(this)` and paid it to the launcher of the
+    /// settling launch. With two launches sharing the same quote/manager, settling launch B would drain the
+    /// raised escrow of (still-open) launch A and ship it to launcher_B. The fix uses `_quoteUsed` from the
+    /// unlock callback so the launcher gets exactly `totalCommitted - quoteUsed`.
+    function test_v11_settle_doesNotDrainOtherLaunchEscrow() public {
+        // Launch A: window in progress, committed but NOT yet settled. Use a different end time.
+        uint64 startA = START;
+        uint64 endA = uint64(START + 3 hours); // open longer than B's window
+        vm.prank(launcherA);
+        (, , PoolId idA) = launch.createLaunch(
+            SealedLaunch.LaunchParams({
+                name: "LaunchA",
+                symbol: "LA",
+                totalSupply: TOTAL_SUPPLY,
+                offeredTokens: OFFERED,
+                lpTokens: LP_TOKENS,
+                quote: Currency.wrap(address(quote)),
+                startTime: startA,
+                endTime: endA,
+                minRaise: 0,
+                maxCommitPerWallet: 0,
+                tickSpacing: TICK_SPACING
+            })
+        );
+
+        // Launch B: separate token, same quote, shorter window so it settles first.
+        uint64 startB = START;
+        uint64 endB = END;
+        vm.prank(launcherB);
+        (, , PoolId idB) = launch.createLaunch(
+            SealedLaunch.LaunchParams({
+                name: "LaunchB",
+                symbol: "LB",
+                totalSupply: TOTAL_SUPPLY,
+                offeredTokens: OFFERED,
+                lpTokens: LP_TOKENS,
+                quote: Currency.wrap(address(quote)),
+                startTime: startB,
+                endTime: endB,
+                minRaise: 0,
+                maxCommitPerWallet: 0,
+                tickSpacing: TICK_SPACING
+            })
+        );
+
+        // Alice commits to A; Bob commits to B.
+        uint256 aliceCommit = 600 ether;
+        uint256 bobCommit = 100 ether;
+        vm.prank(alice);
+        launch.commit(idA, aliceCommit);
+        vm.prank(bob);
+        launch.commit(idB, bobCommit);
+
+        // Sanity: the manager holds both escrows.
+        assertEq(quote.balanceOf(address(launch)), aliceCommit + bobCommit, "manager holds both escrows");
+
+        uint256 launcherBBefore = quote.balanceOf(launcherB);
+
+        // Close + settle B while A is still open. With the bug, settle would pay launcherB the FULL contract
+        // balance minus LP usage — which includes Alice's 600 still-escrowed quote.
+        vm.warp(endB + 1);
+        launch.settle(idB);
+
+        // Launcher B can only have received up to their own raise (minus LP usage). Strictly < aliceCommit.
+        uint256 launcherBGained = quote.balanceOf(launcherB) - launcherBBefore;
+        assertLe(launcherBGained, bobCommit, "launcher B paid no more than launch B's raise");
+
+        // The manager must still hold AT LEAST Alice's full commitment so launch A is solvent.
+        assertGe(quote.balanceOf(address(launch)), aliceCommit, "launch A escrow preserved");
+
+        // And the still-open launch A must remain settleable: Alice can ultimately claim her allocation.
+        vm.warp(endA + 1);
+        launch.settle(idA);
+        vm.prank(alice);
+        launch.claim(idA);
+        assertGt(IERC20(launch.getLaunch(idA).token).balanceOf(alice), 0, "Alice still gets her allocation");
+    }
+
+    /// @dev Finding #3: pre-v1.1, if `_sqrtPriceX96` produced a value outside TickMath bounds (extreme ratio
+    /// of offeredTokens to totalCommitted), `poolManager.initialize` would revert and settle would brick —
+    /// committers permanently locked out of refund. The fix marks the launch failed and unlocks refund.
+    function test_v11_settle_bricksOnBadPriceMarksFailed() public {
+        // Brand-new launch with an enormous `offeredTokens` so even a 1-wei commit makes the price ~0.
+        vm.prank(launcher);
+        (, , PoolId idBad) = launch.createLaunch(
+            SealedLaunch.LaunchParams({
+                name: "BadPrice",
+                symbol: "BAD",
+                totalSupply: type(uint128).max,
+                offeredTokens: type(uint128).max - 1, // huge denominator => clearing price ~ 0
+                lpTokens: 1,
+                quote: Currency.wrap(address(quote)),
+                startTime: START,
+                endTime: END,
+                minRaise: 0,
+                maxCommitPerWallet: 0,
+                tickSpacing: TICK_SPACING
+            })
+        );
+        vm.prank(alice);
+        launch.commit(idBad, 1); // 1 wei commit
+
+        vm.warp(END + 1);
+        // Should NOT brick. settle marks the launch failed and emits LaunchFailedEvent.
+        launch.settle(idBad);
+        SealedLaunch.Launch memory l = launch.getLaunch(idBad);
+        assertTrue(l.settled);
+        assertTrue(l.failed, "out-of-range clearing price marks the launch failed instead of bricking");
+
+        // And alice can refund — committers are NOT locked.
+        uint256 balBefore = quote.balanceOf(alice);
+        vm.prank(alice);
+        launch.refund(idBad);
+        assertEq(quote.balanceOf(alice), balBefore + 1, "refund unlocked after bad-price failure");
+    }
+
+    /// @dev Finding #3 (companion): createLaunch must reject tickSpacing=0 up-front (would otherwise cause
+    /// division-by-zero inside TickMath.minUsableTick during settle).
+    function test_v11_createLaunch_rejectsZeroTickSpacing() public {
+        vm.prank(launcher);
+        vm.expectRevert(SealedLaunch.BadParams.selector);
+        launch.createLaunch(
+            SealedLaunch.LaunchParams({
+                name: "Zero",
+                symbol: "ZTS",
+                totalSupply: TOTAL_SUPPLY,
+                offeredTokens: OFFERED,
+                lpTokens: LP_TOKENS,
+                quote: Currency.wrap(address(quote)),
+                startTime: START,
+                endTime: END,
+                minRaise: 0,
+                maxCommitPerWallet: 0,
+                tickSpacing: 0
+            })
+        );
+    }
+
+    /// @dev Finding #4: a malicious ERC-777-style quote token that hooks `transferFrom` and reenters
+    /// `commit` would, pre-v1.1, double-credit the attacker (inflate `totalCommitted`/`committed` past
+    /// the funds actually delivered). With `nonReentrant`, the reentrant call reverts.
+    function test_v11_commit_reentrancyBlocked() public {
+        ReentrantQuoteToken evil = new ReentrantQuoteToken();
+        // Spin up a launch that uses the malicious token as quote.
+        vm.prank(launcher);
+        (, , PoolId idEvil) = launch.createLaunch(
+            SealedLaunch.LaunchParams({
+                name: "Evil",
+                symbol: "EV",
+                totalSupply: TOTAL_SUPPLY,
+                offeredTokens: OFFERED,
+                lpTokens: LP_TOKENS,
+                quote: Currency.wrap(address(evil)),
+                startTime: START,
+                endTime: END,
+                minRaise: 0,
+                maxCommitPerWallet: 0,
+                tickSpacing: TICK_SPACING
+            })
+        );
+
+        // Configure the token to reenter `commit` during transferFrom.
+        evil.mint(alice, 100 ether);
+        vm.prank(alice);
+        evil.approve(address(launch), type(uint256).max);
+        evil.arm(address(launch), idEvil, 10 ether);
+
+        // The reentrant call to `commit` inside transferFrom must revert (ReentrancyGuardReentrantCall),
+        // which propagates and reverts the outer commit too.
+        vm.prank(alice);
+        vm.expectRevert();
+        launch.commit(idEvil, 10 ether);
+    }
+
+    /// @dev Finding #9: configure() can only be called by an allowlisted manager or the hook owner. A
+    /// random EOA / contract calling `hook.configure(...)` with itself as the manager is rejected.
+    function test_v11_configure_frontRunBlockedByAllowlist() public {
+        // Build a fresh PoolKey that's not yet configured.
+        PoolKey memory k =
+            PoolKey(key.currency0, key.currency1, 3000, int24(120), IHooks(address(hook)));
+
+        address attacker = makeAddr("attacker");
+        vm.prank(attacker);
+        vm.expectRevert(SealedLaunchHook.ManagerNotAllowed.selector);
+        hook.configure(k, START, END, attacker);
+    }
+}
+
+// ============================================================================
+// Malicious ERC-777-style quote token used by the v1.1 reentrancy test. Hooks
+// `transferFrom` to reenter the launch contract — must be blocked by nonReentrant.
+// ============================================================================
+
+contract ReentrantQuoteToken {
+    string public constant name = "Evil";
+    string public constant symbol = "EVL";
+    uint8 public constant decimals = 18;
+
+    mapping(address => uint256) public balanceOf;
+    mapping(address => mapping(address => uint256)) public allowance;
+    uint256 public totalSupply;
+
+    SealedLaunch private _target;
+    PoolId private _id;
+    uint256 private _amt;
+    bool private _armed;
+    bool private _entered;
+
+    function mint(address to, uint256 amount) external {
+        balanceOf[to] += amount;
+        totalSupply += amount;
+    }
+
+    function approve(address spender, uint256 amount) external returns (bool) {
+        allowance[msg.sender][spender] = amount;
+        return true;
+    }
+
+    function transfer(address to, uint256 amount) external returns (bool) {
+        balanceOf[msg.sender] -= amount;
+        balanceOf[to] += amount;
+        return true;
+    }
+
+    function transferFrom(address from, address to, uint256 amount) external returns (bool) {
+        if (_armed && !_entered) {
+            _entered = true;
+            // ERC-777-style reentrancy: try to commit AGAIN before the outer commit finishes.
+            _target.commit(_id, _amt);
+        }
+        if (allowance[from][msg.sender] != type(uint256).max) {
+            allowance[from][msg.sender] -= amount;
+        }
+        balanceOf[from] -= amount;
+        balanceOf[to] += amount;
+        return true;
+    }
+
+    function arm(address target, PoolId id, uint256 amt) external {
+        _target = SealedLaunch(target);
+        _id = id;
+        _amt = amt;
+        _armed = true;
     }
 }

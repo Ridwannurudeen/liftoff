@@ -26,6 +26,11 @@ import {SealedLaunch} from "../src/SealedLaunch.sol";
 contract DeploySealedLaunch is Script {
     address constant XLAYER_POOL_MANAGER = 0x360E68faCcca8cA495c1B759Fd9EEe466db9FB32;
 
+    // v1.1 default allowlist: the existing deployed manager addresses, so fork/integration tests against
+    // a freshly-deployed hook keep working out of the box.
+    address constant SEALED_LAUNCH_V1 = 0xd6a240183eea10cd74f9911FE3f7717c90564B8C;
+    address constant COMMIT_REVEAL_LAUNCH_V2 = 0xaeD6bd08CDBaD833312d6BCFd9F97954350F606e;
+
     int24 constant DEMO_TICK_SPACING = 60;
 
     function run() external {
@@ -40,12 +45,19 @@ contract DeploySealedLaunch is Script {
 
         vm.startBroadcast(pk);
 
-        (address hookAddr, bytes32 salt) =
-            HookMiner.find(CREATE2_FACTORY, flags, type(SealedLaunchHook).creationCode, abi.encode(pmgr));
-        SealedLaunchHook hook = new SealedLaunchHook{salt: salt}(pmgr);
+        (address hookAddr, bytes32 salt) = HookMiner.find(
+            CREATE2_FACTORY, flags, type(SealedLaunchHook).creationCode, abi.encode(pmgr, deployer)
+        );
+        SealedLaunchHook hook = new SealedLaunchHook{salt: salt}(pmgr, deployer);
         require(address(hook) == hookAddr, "hook addr mismatch");
 
         SealedLaunch launch = new SealedLaunch(pmgr, hook);
+        // v1.1: gate configure() to a manager allowlist. Whitelist this freshly-deployed manager so the
+        // launch below can configure its pool, plus the historical v1 + v2 manager addresses so existing
+        // integration / fork tests keep working against this hook.
+        hook.setManagerAllowed(address(launch), true);
+        hook.setManagerAllowed(SEALED_LAUNCH_V1, true);
+        hook.setManagerAllowed(COMMIT_REVEAL_LAUNCH_V2, true);
 
         MockERC20 quote = new MockERC20("Demo USD", "dUSD", 18);
         quote.mint(deployer, 1e24);

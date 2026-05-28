@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {IERC20} from "forge-std/interfaces/IERC20.sol";
 
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
+import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import {StateLibrary} from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
 import {FullMath} from "@uniswap/v4-core/src/libraries/FullMath.sol";
@@ -50,10 +51,11 @@ contract CommitRevealLaunchTest is BaseTest {
             uint160(Hooks.BEFORE_INITIALIZE_FLAG | Hooks.BEFORE_ADD_LIQUIDITY_FLAG | Hooks.BEFORE_SWAP_FLAG)
                 ^ (0x5555 << 144)
         );
-        deployCodeTo("SealedLaunchHook.sol:SealedLaunchHook", abi.encode(poolManager), flags);
+        deployCodeTo("SealedLaunchHook.sol:SealedLaunchHook", abi.encode(poolManager, address(this)), flags);
         hook = SealedLaunchHook(flags);
 
         launch = new CommitRevealLaunch(poolManager, hook);
+        hook.setManagerAllowed(address(launch), true);
         quote = new MockERC20("Quote", "Q", 18);
 
         START = uint64(block.timestamp);
@@ -291,5 +293,252 @@ contract CommitRevealLaunchTest is BaseTest {
         // reveal window still open
         vm.expectRevert(CommitRevealLaunch.WindowNotClosed.selector);
         launch.settle(id);
+    }
+
+    // ============================================================
+    // v1.1 hardening — fixes #2, #3, #4, #9
+    // ============================================================
+
+    address launcherA = makeAddr("launcherA");
+    address launcherB = makeAddr("launcherB");
+
+    function _createWithEnd(string memory n, string memory s, uint64 cEnd, uint64 rEnd, uint256 minRaise, address who)
+        internal
+        returns (PoolId pid)
+    {
+        vm.prank(who);
+        (, , pid) = launch.createLaunch(
+            CommitRevealLaunch.LaunchParams({
+                name: n,
+                symbol: s,
+                totalSupply: TOTAL_SUPPLY,
+                offeredTokens: OFFERED,
+                lpTokens: LP_TOKENS,
+                quote: Currency.wrap(address(quote)),
+                startTime: START,
+                commitEnd: cEnd,
+                revealEnd: rEnd,
+                minRaise: minRaise,
+                maxMaskedPerWallet: 0,
+                tickSpacing: TICK_SPACING
+            })
+        );
+    }
+
+    /// @dev Finding #2: even with the v2 `quoteUsed`-based launcher payout, an extreme `lpTokens` /
+    /// `offeredTokens` ratio or out-of-range price math could make `quoteUsed > totalRevealed`, draining
+    /// other launches' escrow. The fix adds `require(quoteUsed <= totalRevealed)`.
+    /// Also: with two launches sharing the same quote+manager, settling B must not pay launcher_B more
+    /// than launch B's revealed raise (no sweep of A's escrow).
+    function test_v11_settle_doesNotDrainOtherLaunchEscrow() public {
+        uint64 cEndB = COMMIT_END;
+        uint64 rEndB = REVEAL_END;
+        uint64 cEndA = uint64(START + 3 hours);
+        uint64 rEndA = uint64(START + 4 hours);
+
+        PoolId idA = _createWithEnd("A", "A", cEndA, rEndA, 0, launcherA);
+        PoolId idB = _createWithEnd("B", "B", cEndB, rEndB, 0, launcherB);
+
+        // Alice commits to A (big), Bob to B (small).
+        bytes32 cA = launch.commitmentFor(600 ether, _salt(alice), alice);
+        vm.prank(alice);
+        launch.commit(idA, cA, 600 ether);
+        bytes32 cB = launch.commitmentFor(100 ether, _salt(bob), bob);
+        vm.prank(bob);
+        launch.commit(idB, cB, 100 ether);
+
+        // Reveal both during their respective reveal windows. Bob first (B window opens first).
+        vm.warp(cEndB + 1);
+        vm.prank(bob);
+        launch.reveal(idB, 100 ether, _salt(bob));
+
+        // Settle B while A is still open. Before settling, the manager holds 600+100 quote.
+        assertEq(quote.balanceOf(address(launch)), 700 ether);
+        uint256 launcherBBefore = quote.balanceOf(launcherB);
+
+        vm.warp(rEndB + 1);
+        launch.settle(idB);
+
+        // Launcher B got at most their own revealed raise (minus LP), never Alice's 600.
+        uint256 launcherBGained = quote.balanceOf(launcherB) - launcherBBefore;
+        assertLe(launcherBGained, 100 ether, "launcher B paid no more than launch B revealed");
+
+        // Manager still holds Alice's full deposit so launch A is solvent.
+        assertGe(quote.balanceOf(address(launch)), 600 ether, "launch A escrow preserved");
+
+        // A still settleable end-to-end: reveal + settle + claim.
+        vm.warp(cEndA + 1);
+        vm.prank(alice);
+        launch.reveal(idA, 600 ether, _salt(alice));
+        vm.warp(rEndA + 1);
+        launch.settle(idA);
+        vm.prank(alice);
+        launch.claim(idA);
+        assertGt(IERC20(launch.getLaunch(idA).token).balanceOf(alice), 0, "Alice still claims her allocation");
+    }
+
+    /// @dev Finding #3: an out-of-range clearing price (extreme offered/revealed ratio) would brick settle
+    /// pre-v1.1 because PoolManager.initialize reverted. The fix marks the launch failed so revealers can
+    /// reclaim.
+    function test_v11_settle_bricksOnBadPriceMarksFailed() public {
+        vm.prank(launcher);
+        (, , PoolId idBad) = launch.createLaunch(
+            CommitRevealLaunch.LaunchParams({
+                name: "BadPrice",
+                symbol: "BAD",
+                totalSupply: type(uint128).max,
+                offeredTokens: type(uint128).max - 1, // huge denominator => clearing price ~ 0
+                lpTokens: 1,
+                quote: Currency.wrap(address(quote)),
+                startTime: START,
+                commitEnd: COMMIT_END,
+                revealEnd: REVEAL_END,
+                minRaise: 0,
+                maxMaskedPerWallet: 0,
+                tickSpacing: TICK_SPACING
+            })
+        );
+        bytes32 c = launch.commitmentFor(1, _salt(alice), alice);
+        vm.prank(alice);
+        launch.commit(idBad, c, 1);
+        vm.warp(COMMIT_END + 1);
+        vm.prank(alice);
+        launch.reveal(idBad, 1, _salt(alice));
+        vm.warp(REVEAL_END + 1);
+
+        // Should NOT brick.
+        launch.settle(idBad);
+        CommitRevealLaunch.Launch memory l = launch.getLaunch(idBad);
+        assertTrue(l.settled);
+        assertTrue(l.failed, "out-of-range clearing price marks launch failed");
+
+        // Alice can reclaim her revealed bid via the failed-launch path.
+        uint256 balBefore = quote.balanceOf(alice);
+        vm.prank(alice);
+        launch.reclaim(idBad);
+        assertEq(quote.balanceOf(alice), balBefore + 1);
+    }
+
+    function test_v11_createLaunch_rejectsZeroTickSpacing() public {
+        vm.prank(launcher);
+        vm.expectRevert(CommitRevealLaunch.BadParams.selector);
+        launch.createLaunch(
+            CommitRevealLaunch.LaunchParams({
+                name: "Zero",
+                symbol: "ZTS",
+                totalSupply: TOTAL_SUPPLY,
+                offeredTokens: OFFERED,
+                lpTokens: LP_TOKENS,
+                quote: Currency.wrap(address(quote)),
+                startTime: START,
+                commitEnd: COMMIT_END,
+                revealEnd: REVEAL_END,
+                minRaise: 0,
+                maxMaskedPerWallet: 0,
+                tickSpacing: 0
+            })
+        );
+    }
+
+    /// @dev Finding #4: ERC-777-style reentrancy via the quote token's `transferFrom` hook must be blocked
+    /// by `nonReentrant`. We try to reenter `commit` from within the masked-deposit transfer.
+    function test_v11_commit_reentrancyBlocked() public {
+        ReentrantQuoteToken evil = new ReentrantQuoteToken();
+        vm.prank(launcher);
+        (, , PoolId idEvil) = launch.createLaunch(
+            CommitRevealLaunch.LaunchParams({
+                name: "Evil",
+                symbol: "EV",
+                totalSupply: TOTAL_SUPPLY,
+                offeredTokens: OFFERED,
+                lpTokens: LP_TOKENS,
+                quote: Currency.wrap(address(evil)),
+                startTime: START,
+                commitEnd: COMMIT_END,
+                revealEnd: REVEAL_END,
+                minRaise: 0,
+                maxMaskedPerWallet: 0,
+                tickSpacing: TICK_SPACING
+            })
+        );
+
+        evil.mint(alice, 100 ether);
+        vm.prank(alice);
+        evil.approve(address(launch), type(uint256).max);
+        bytes32 cm = launch.commitmentFor(10 ether, _salt(alice), alice);
+        evil.armCommit(address(launch), idEvil, cm, 10 ether);
+
+        vm.prank(alice);
+        vm.expectRevert();
+        launch.commit(idEvil, cm, 10 ether);
+    }
+
+    /// @dev Finding #9: configure() is allowlist-gated. A non-owner non-allowlisted manager calling
+    /// configure on a fresh pool key must revert.
+    function test_v11_configure_frontRunBlockedByAllowlist() public {
+        PoolKey memory k =
+            PoolKey(key.currency0, key.currency1, 3000, int24(120), IHooks(address(hook)));
+        address attacker = makeAddr("attacker");
+        vm.prank(attacker);
+        vm.expectRevert(SealedLaunchHook.ManagerNotAllowed.selector);
+        hook.configure(k, START, REVEAL_END, attacker);
+    }
+}
+
+// ============================================================================
+// Malicious ERC-777-style quote token used by the v1.1 reentrancy test.
+// ============================================================================
+
+contract ReentrantQuoteToken {
+    string public constant name = "Evil";
+    string public constant symbol = "EVL";
+    uint8 public constant decimals = 18;
+
+    mapping(address => uint256) public balanceOf;
+    mapping(address => mapping(address => uint256)) public allowance;
+    uint256 public totalSupply;
+
+    CommitRevealLaunch private _target;
+    PoolId private _id;
+    bytes32 private _cm;
+    uint256 private _amt;
+    bool private _armed;
+    bool private _entered;
+
+    function mint(address to, uint256 amount) external {
+        balanceOf[to] += amount;
+        totalSupply += amount;
+    }
+
+    function approve(address spender, uint256 amount) external returns (bool) {
+        allowance[msg.sender][spender] = amount;
+        return true;
+    }
+
+    function transfer(address to, uint256 amount) external returns (bool) {
+        balanceOf[msg.sender] -= amount;
+        balanceOf[to] += amount;
+        return true;
+    }
+
+    function transferFrom(address from, address to, uint256 amount) external returns (bool) {
+        if (_armed && !_entered) {
+            _entered = true;
+            _target.commit(_id, _cm, _amt);
+        }
+        if (allowance[from][msg.sender] != type(uint256).max) {
+            allowance[from][msg.sender] -= amount;
+        }
+        balanceOf[from] -= amount;
+        balanceOf[to] += amount;
+        return true;
+    }
+
+    function armCommit(address target, PoolId id, bytes32 cm, uint256 amt) external {
+        _target = CommitRevealLaunch(target);
+        _id = id;
+        _cm = cm;
+        _amt = amt;
+        _armed = true;
     }
 }

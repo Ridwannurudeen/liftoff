@@ -2,6 +2,7 @@
 pragma solidity ^0.8.26;
 
 import {BaseHook} from "@openzeppelin/uniswap-hooks/src/base/BaseHook.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
@@ -21,7 +22,7 @@ import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "@uniswap/v4-core/src/type
 /// @dev One hook serves every launch pool; per-pool config and state live in mappings keyed by `PoolId`.
 /// The hook itself holds no funds and runs no price math — that all lives in `SealedLaunch`. This hook is
 /// purely the access-control gate around the v4 pool.
-contract SealedLaunchHook is BaseHook {
+contract SealedLaunchHook is BaseHook, Ownable {
     using PoolIdLibrary for PoolKey;
 
     struct LaunchInfo {
@@ -32,19 +33,31 @@ contract SealedLaunchHook is BaseHook {
     }
 
     mapping(PoolId => LaunchInfo) internal _launches;
+    /// @notice Allowlist of manager contracts that may call `configure` directly. The owner can always
+    /// configure (and can grant/revoke other managers). This blocks the front-run where an attacker calls
+    /// `configure(key, ..., theirManager)` with `msg.sender == theirManager` and locks the pool to themselves.
+    mapping(address => bool) public managerAllowed;
 
     error AlreadyConfigured();
     error NotConfigured();
     error NotManager();
     error BadConfig();
+    error ManagerNotAllowed();
     error SwapsLockedUntilSettled();
     error AddLiquidityLockedUntilSettled();
     error AlreadySettled();
 
     event LaunchConfigured(PoolId indexed poolId, address indexed manager, uint64 startTime, uint64 endTime);
     event Settled(PoolId indexed poolId);
+    event ManagerAllowed(address indexed manager, bool ok);
 
-    constructor(IPoolManager _poolManager) BaseHook(_poolManager) {}
+    constructor(IPoolManager _poolManager, address admin) BaseHook(_poolManager) Ownable(admin) {}
+
+    /// @notice Owner-only: grant or revoke permission for `manager` to call `configure` on this hook.
+    function setManagerAllowed(address manager, bool ok) external onlyOwner {
+        managerAllowed[manager] = ok;
+        emit ManagerAllowed(manager, ok);
+    }
 
     function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
         return Hooks.Permissions({
@@ -65,13 +78,16 @@ contract SealedLaunchHook is BaseHook {
         });
     }
 
-    /// @notice Configure a launch for a pool. Callable once per pool, before the pool is initialized,
-    /// and only by the manager that will run the auction.
+    /// @notice Configure a launch for a pool. Callable once per pool, before the pool is initialized.
+    /// `msg.sender` must equal `manager` (the contract that will run the auction), AND either be the hook
+    /// owner or be on the manager allowlist. Without the allowlist, anyone could front-run a legitimate
+    /// launch's `configure` and lock the pool to their own manager address.
     function configure(PoolKey calldata key, uint64 startTime, uint64 endTime, address manager) external {
         PoolId id = key.toId();
         if (_launches[id].manager != address(0)) revert AlreadyConfigured();
         if (msg.sender != manager) revert NotManager();
         if (manager == address(0) || endTime <= startTime) revert BadConfig();
+        if (msg.sender != owner() && !managerAllowed[msg.sender]) revert ManagerNotAllowed();
         _launches[id] = LaunchInfo({manager: manager, startTime: startTime, endTime: endTime, settled: false});
         emit LaunchConfigured(id, manager, startTime, endTime);
     }
