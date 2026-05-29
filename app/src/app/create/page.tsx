@@ -49,7 +49,8 @@ export default function CreateLaunchPage() {
   const { address } = useAccount();
   const chainId = useChainId();
   const publicClient = usePublicClient({ chainId: 196 });
-  const { data: walletClient } = useWalletClient();
+  // Pin to xLayer so the wallet client doesn't race during connection.
+  const { data: walletClient } = useWalletClient({ chainId: xLayer.id });
 
   const [name, setName] = useState("Demo Launch Token");
   const [symbol, setSymbol] = useState("DEMO");

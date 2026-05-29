@@ -83,7 +83,11 @@ export default function QuoteFaucet() {
   const { address } = useAccount();
   const chainId = useChainId();
   const publicClient = usePublicClient({ chainId: 196 });
-  const { data: walletClient } = useWalletClient();
+  // Pin to xLayer so the wallet client doesn't race during connection / chain
+  // switching. Without this `useWalletClient()` can briefly return undefined
+  // even while `useChainId()` already reports the right chain, leading to a
+  // confusing "wallet not ready" error when the user clicks Mint.
+  const { data: walletClient } = useWalletClient({ chainId: xLayer.id });
 
   const [amountStr, setAmountStr] = useState("1000");
   const [status, setStatus] = useState<Status>({ kind: "idle" });
@@ -166,7 +170,7 @@ export default function QuoteFaucet() {
     }
   };
 
-  const buttonDisabled = status.kind === "pending" || cooldown;
+  const buttonDisabled = status.kind === "pending" || cooldown || !walletClient;
 
   return (
     <div className="card">

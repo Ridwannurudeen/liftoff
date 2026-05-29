@@ -115,7 +115,8 @@ export function ActionPanel({
   const { address } = useAccount();
   const chainId = useChainId();
   const publicClient = usePublicClient();
-  const { data: walletClient } = useWalletClient();
+  // Pin to xLayer so the wallet client doesn't race during connection.
+  const { data: walletClient } = useWalletClient({ chainId: xLayer.id });
 
   const [status, setStatus] = useState<Status>({ kind: "idle" });
 
