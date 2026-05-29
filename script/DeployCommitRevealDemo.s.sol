@@ -41,7 +41,10 @@ contract DeployCommitRevealDemo is Script {
         require(block.chainid == 196, "wrong chain: expected X Layer mainnet 196");
         uint256 pkA = vm.envUint("PRIVATE_KEY");
         uint256 pkB = vm.envUint("BIDDER2_PRIVATE_KEY");
-        SealedLaunchHook hook = SealedLaunchHook(EXISTING_HOOK);
+        // Allow override so this can target a freshly-deployed v1.1 hook that has us allowlisted; the
+        // hardcoded address is the original 0x2880-flag hook on mainnet (works with the pre-v1.1 ABI).
+        SealedLaunchHook hook = SealedLaunchHook(vm.envOr("HOOK", EXISTING_HOOK));
+        require(address(hook).code.length > 0, "HOOK has no code on this chain");
 
         (address launchAddr, address quoteAddr, address tokenAddr, PoolId id, uint64 cEnd, uint64 rEnd) =
             _deployAndOpen(pkA, pkB, hook);

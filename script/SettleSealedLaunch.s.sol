@@ -31,7 +31,9 @@ contract SettleSealedLaunch is Script {
         require(block.chainid == 196, "wrong chain: expected X Layer mainnet 196");
         uint256 pk = vm.envUint("PRIVATE_KEY");
         SealedLaunch launch = SealedLaunch(vm.envAddress("LAUNCH"));
+        require(address(launch).code.length > 0, "LAUNCH has no code: bad address?");
         PoolId id = PoolId.wrap(vm.envBytes32("POOL_ID"));
+        require(PoolId.unwrap(id) != bytes32(0), "POOL_ID is zero");
 
         vm.startBroadcast(pk);
         launch.settle(id);

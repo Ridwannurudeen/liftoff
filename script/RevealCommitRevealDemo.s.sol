@@ -20,7 +20,9 @@ contract RevealCommitRevealDemo is Script {
         uint256 pkA = vm.envUint("PRIVATE_KEY");
         uint256 pkB = vm.envUint("BIDDER2_PRIVATE_KEY");
         CommitRevealLaunch launch = CommitRevealLaunch(vm.envAddress("LAUNCH"));
+        require(address(launch).code.length > 0, "LAUNCH has no code: bad address?");
         PoolId id = PoolId.wrap(vm.envBytes32("POOL_ID"));
+        require(PoolId.unwrap(id) != bytes32(0), "POOL_ID is zero");
 
         bytes32 saltA = keccak256("v2-demo-saltA");
         bytes32 saltB = keccak256("v2-demo-saltB");

@@ -46,6 +46,15 @@ export function useLaunch(args: {
             }) as Promise<Bid>)
           : Promise.resolve(null),
       ]);
+      // Solidity returns a zero-initialized struct (token == address(0))
+      // when the poolId doesn't exist on this manager. Treat that as "not
+      // found" so the existing sanitized error UI engages instead of
+      // rendering phantom auction cards.
+      if (launch.token === "0x0000000000000000000000000000000000000000") {
+        throw new Error(
+          `No launch found for this manager + poolId. Double-check the pool id.`,
+        );
+      }
       return { launch, bid };
     },
   });

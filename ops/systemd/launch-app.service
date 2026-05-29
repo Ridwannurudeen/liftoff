@@ -1,0 +1,27 @@
+[Unit]
+Description=Sealed Launch dApp (Next.js)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/sealed-launch-app/src/app
+ExecStart=/usr/bin/node /opt/sealed-launch-app/src/app/node_modules/next/dist/bin/next start -p 3072
+Restart=always
+RestartSec=3
+# Cap thrash if next start crash-loops.
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+Environment=NODE_ENV=production
+Environment=PORT=3072
+
+# Modest sandboxing (Next.js doesn't need root or broad fs access).
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/sealed-launch-app
+
+[Install]
+WantedBy=multi-user.target
