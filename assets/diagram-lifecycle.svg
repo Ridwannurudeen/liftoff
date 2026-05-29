@@ -1,0 +1,121 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 440" width="1400" height="440" role="img" aria-label="Sealed Launch auction lifecycle: commit, reveal, settle, claim">
+  <defs>
+    <radialGradient id="halo" cx="700" cy="20" r="600" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#161a36" stop-opacity="0.6"/>
+      <stop offset="1" stop-color="#06070d" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="arrowGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#6c8bff"/>
+      <stop offset="1" stop-color="#b06cff"/>
+    </linearGradient>
+    <linearGradient id="badge4Grad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#6c8bff"/>
+      <stop offset="1" stop-color="#b06cff"/>
+    </linearGradient>
+    <style>
+      .title { font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-weight: 700; font-size: 36px; fill: #e8ecf8; }
+      .subtitle { font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-weight: 400; font-size: 18px; font-style: italic; fill: #9aa3c4; }
+      .body { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 400; font-size: 16px; fill: #e8ecf8; }
+      .badge { font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-weight: 700; font-size: 14px; fill: #ffffff; }
+      .strip { font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-weight: 400; font-size: 16px; fill: #9aa3c4; }
+    </style>
+  </defs>
+
+  <!-- Background -->
+  <rect x="0" y="0" width="1400" height="440" fill="#06070d"/>
+  <rect x="0" y="0" width="1400" height="440" fill="url(#halo)"/>
+
+  <!-- Faint stars -->
+  <g fill="#ffffff">
+    <circle cx="90"   cy="40"  r="1.7" opacity="0.38"/>
+    <circle cx="220"  cy="60"  r="1.5" opacity="0.32"/>
+    <circle cx="410"  cy="30"  r="2"   opacity="0.42"/>
+    <circle cx="560"  cy="55"  r="1.5" opacity="0.30"/>
+    <circle cx="720"  cy="35"  r="1.8" opacity="0.45"/>
+    <circle cx="860"  cy="58"  r="1.6" opacity="0.33"/>
+    <circle cx="1020" cy="28"  r="2"   opacity="0.40"/>
+    <circle cx="1180" cy="50"  r="1.7" opacity="0.36"/>
+    <circle cx="1320" cy="38"  r="1.5" opacity="0.30"/>
+    <circle cx="150"  cy="380" r="1.5" opacity="0.30"/>
+    <circle cx="480"  cy="385" r="1.7" opacity="0.34"/>
+    <circle cx="780"  cy="378" r="1.6" opacity="0.32"/>
+    <circle cx="1100" cy="382" r="1.8" opacity="0.40"/>
+    <circle cx="1280" cy="375" r="1.5" opacity="0.30"/>
+  </g>
+
+  <!-- Arrows between cards -->
+  <!-- Arrow 1: 320 -> 360 at y=220 -->
+  <g>
+    <line x1="322" y1="220" x2="350" y2="220" stroke="url(#arrowGrad)" stroke-width="3" stroke-linecap="round"/>
+    <polygon points="350,212 362,220 350,228" fill="url(#arrowGrad)"/>
+  </g>
+  <!-- Arrow 2: 640 -> 680 at y=220 -->
+  <g>
+    <line x1="642" y1="220" x2="670" y2="220" stroke="url(#arrowGrad)" stroke-width="3" stroke-linecap="round"/>
+    <polygon points="670,212 682,220 670,228" fill="url(#arrowGrad)"/>
+  </g>
+  <!-- Arrow 3: 960 -> 1000 at y=220 -->
+  <g>
+    <line x1="962" y1="220" x2="990" y2="220" stroke="url(#arrowGrad)" stroke-width="3" stroke-linecap="round"/>
+    <polygon points="990,212 1002,220 990,228" fill="url(#arrowGrad)"/>
+  </g>
+
+  <!-- ============ Card 1: COMMIT ============ -->
+  <g>
+    <rect x="40" y="80" width="280" height="280" rx="18" ry="18" fill="#111426" stroke="#232842" stroke-width="1.5"/>
+    <!-- Badge -->
+    <rect x="56" y="96" width="40" height="24" rx="12" ry="12" fill="#6c8bff"/>
+    <text x="76" y="113" text-anchor="middle" class="badge">1</text>
+    <!-- Title (relative x=24,y=82 -> abs x=64, y=162) -->
+    <text x="64" y="162" class="title">COMMIT</text>
+    <!-- Subtitle (relative x=24,y=112 -> abs x=64, y=192) -->
+    <text x="64" y="192" class="subtitle">sealed bid</text>
+    <!-- Body (relative x=24,y=160 -> abs x=64, y=240); line-height 1.5 * 16 = 24 -->
+    <text x="64" y="240" class="body">keccak256(amount,</text>
+    <text x="64" y="264" class="body">salt, bidder)</text>
+    <text x="64" y="288" class="body">+ masked</text>
+    <text x="64" y="312" class="body">deposit</text>
+  </g>
+
+  <!-- ============ Card 2: REVEAL ============ -->
+  <g>
+    <rect x="360" y="80" width="280" height="280" rx="18" ry="18" fill="#111426" stroke="#232842" stroke-width="1.5"/>
+    <rect x="376" y="96" width="40" height="24" rx="12" ry="12" fill="#b06cff"/>
+    <text x="396" y="113" text-anchor="middle" class="badge">2</text>
+    <text x="384" y="162" class="title">REVEAL</text>
+    <text x="384" y="192" class="subtitle">open bid</text>
+    <text x="384" y="240" class="body">amount + salt</text>
+    <text x="384" y="264" class="body">&#8594; verified</text>
+    <text x="384" y="288" class="body">against hash;</text>
+    <text x="384" y="312" class="body">overage refunds</text>
+  </g>
+
+  <!-- ============ Card 3: SETTLE ============ -->
+  <g>
+    <rect x="680" y="80" width="280" height="280" rx="18" ry="18" fill="#111426" stroke="#232842" stroke-width="1.5"/>
+    <rect x="696" y="96" width="40" height="24" rx="12" ry="12" fill="#3ee08e"/>
+    <text x="716" y="113" text-anchor="middle" class="badge">3</text>
+    <text x="704" y="162" class="title">SETTLE</text>
+    <text x="704" y="192" class="subtitle">uniform price</text>
+    <text x="704" y="240" class="body">P = total /</text>
+    <text x="704" y="264" class="body">offered</text>
+    <text x="704" y="288" class="body">&#8226; init pool</text>
+    <text x="704" y="312" class="body">&#8226; seed LP</text>
+  </g>
+
+  <!-- ============ Card 4: CLAIM ============ -->
+  <g>
+    <rect x="1000" y="80" width="280" height="280" rx="18" ry="18" fill="#111426" stroke="#232842" stroke-width="1.5"/>
+    <rect x="1016" y="96" width="40" height="24" rx="12" ry="12" fill="url(#badge4Grad)"/>
+    <text x="1036" y="113" text-anchor="middle" class="badge">4</text>
+    <text x="1024" y="162" class="title">CLAIM</text>
+    <text x="1024" y="192" class="subtitle">pro-rata</text>
+    <text x="1024" y="240" class="body">alloc = offered</text>
+    <text x="1024" y="264" class="body">&#215; commit / total</text>
+    <text x="1024" y="288" class="body">or reclaim if</text>
+    <text x="1024" y="312" class="body">no reveal</text>
+  </g>
+
+  <!-- Bottom info strip at y=400, centered -->
+  <text x="700" y="412" text-anchor="middle" class="strip">commit window &#9472; reveal window &#9472; settle (anyone) &#9472; claim / reclaim</text>
+</svg>

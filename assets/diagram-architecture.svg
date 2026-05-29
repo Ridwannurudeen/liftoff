@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 680" width="1200" height="680" font-family="Inter, system-ui, -apple-system, sans-serif">
+  <defs>
+    <linearGradient id="chainStroke" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#6c8bff"/>
+      <stop offset="100%" stop-color="#b06cff"/>
+    </linearGradient>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <polygon points="0,0 10,5 0,10" fill="#6c8bff"/>
+    </marker>
+  </defs>
+
+  <!-- background -->
+  <rect width="1200" height="680" fill="#06070d"/>
+
+  <!-- 1. USER -->
+  <g>
+    <rect x="340" y="24" width="520" height="60" rx="14" fill="#111426" stroke="#232842"/>
+    <text x="600" y="60" text-anchor="middle" fill="#e8ecf8" font-size="22" font-weight="600">USER</text>
+    <text x="600" y="78" text-anchor="middle" fill="#9aa3c4" font-size="14">wallet on X Layer chain 196</text>
+  </g>
+
+  <!-- arrow 1 -->
+  <line x1="600" y1="84" x2="600" y2="116" stroke="#6c8bff" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="612" y="104" fill="#9aa3c4" font-size="12" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">commit / reveal / claim</text>
+
+  <!-- 2. dApp -->
+  <g>
+    <rect x="300" y="120" width="600" height="74" rx="14" fill="#111426" stroke="#232842"/>
+    <text x="600" y="150" text-anchor="middle" fill="#e8ecf8" font-size="22" font-weight="600">sealedlaunch-app</text>
+    <text x="600" y="170" text-anchor="middle" fill="#9aa3c4" font-size="14">Next.js dApp</text>
+    <text x="600" y="187" text-anchor="middle" fill="#9aa3c4" font-size="13" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">/app   /app/create   /app?launch=…</text>
+  </g>
+
+  <!-- arrow 2 -->
+  <line x1="600" y1="194" x2="600" y2="226" stroke="#6c8bff" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="612" y="214" fill="#9aa3c4" font-size="12" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">viem WriteContract</text>
+
+  <!-- 3. SDK -->
+  <g>
+    <rect x="300" y="230" width="600" height="74" rx="14" fill="#111426" stroke="#232842"/>
+    <text x="600" y="260" text-anchor="middle" fill="#e8ecf8" font-size="22" font-weight="600">sealed-launch-sdk</text>
+    <text x="600" y="280" text-anchor="middle" fill="#9aa3c4" font-size="14">TypeScript</text>
+    <text x="600" y="297" text-anchor="middle" fill="#9aa3c4" font-size="13" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">createLaunch · commit · reveal · settle · claim</text>
+  </g>
+
+  <!-- arrow 3 -->
+  <line x1="600" y1="304" x2="600" y2="336" stroke="#6c8bff" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="612" y="324" fill="#9aa3c4" font-size="12" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">RPC https://rpc.xlayer.tech</text>
+
+  <!-- 4. X LAYER frame -->
+  <g>
+    <rect x="60" y="344" width="1080" height="312" rx="16" fill="#0d1020" stroke="url(#chainStroke)" stroke-width="1.5"/>
+    <text x="84" y="376" fill="#e8ecf8" font-size="20" font-weight="600">X LAYER MAINNET</text>
+    <text x="280" y="376" fill="#9aa3c4" font-size="14" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">chain 196</text>
+
+    <!-- v1 box -->
+    <g>
+      <rect x="96" y="396" width="468" height="76" rx="14" fill="#161a30" stroke="#232842"/>
+      <text x="330" y="424" text-anchor="middle" fill="#e8ecf8" font-size="18" font-weight="600">SealedLaunch (v1)</text>
+      <text x="330" y="452" text-anchor="middle" fill="#9aa3c4" font-size="14" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">0xd6a24018…</text>
+    </g>
+
+    <!-- v2 box -->
+    <g>
+      <rect x="636" y="396" width="468" height="76" rx="14" fill="#161a30" stroke="#232842"/>
+      <text x="870" y="424" text-anchor="middle" fill="#e8ecf8" font-size="18" font-weight="600">CommitRevealLaunch (v2)</text>
+      <text x="870" y="452" text-anchor="middle" fill="#9aa3c4" font-size="14" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">0xaeD6bd08…</text>
+    </g>
+
+    <!-- both configure arrows down to hook -->
+    <line x1="330" y1="472" x2="330" y2="506" stroke="#6c8bff" stroke-width="2" marker-end="url(#arrow)"/>
+    <line x1="870" y1="472" x2="870" y2="506" stroke="#6c8bff" stroke-width="2" marker-end="url(#arrow)"/>
+    <text x="600" y="492" text-anchor="middle" fill="#9aa3c4" font-size="12" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">both configure</text>
+
+    <!-- Hook -->
+    <g>
+      <rect x="96" y="510" width="1008" height="62" rx="14" fill="#111426" stroke="#232842"/>
+      <text x="600" y="538" text-anchor="middle" fill="#e8ecf8" font-size="18" font-weight="600">SealedLaunchHook</text>
+      <text x="600" y="558" text-anchor="middle" fill="#9aa3c4" font-size="13" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">0x594B5395…  ·  gates pool until settle</text>
+    </g>
+
+    <!-- arrow hook -> pool -->
+    <line x1="600" y1="572" x2="600" y2="598" stroke="#6c8bff" stroke-width="2" marker-end="url(#arrow)"/>
+
+    <!-- PoolManager -->
+    <g>
+      <rect x="96" y="600" width="1008" height="44" rx="14" fill="#111426" stroke="#232842"/>
+      <text x="600" y="628" text-anchor="middle" fill="#e8ecf8" font-size="16" font-weight="600">
+        Official Uniswap v4 PoolManager
+        <tspan fill="#9aa3c4" font-weight="400" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">  0x360E68fa…</tspan>
+      </text>
+    </g>
+  </g>
+</svg>
