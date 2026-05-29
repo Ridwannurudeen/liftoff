@@ -62,7 +62,7 @@ app/
 The SDK is consumed via `file:../sdk`, so it must be built first:
 
 ```sh
-cd liftoff/sdk && npm install && npm run build
+cd sealedlaunch/sdk && npm install && npm run build
 cd ../app && npm install && npm run dev
 # open http://localhost:3000/app
 ```

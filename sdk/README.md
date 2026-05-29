@@ -16,7 +16,7 @@ Until `0.1.0` is published to npm, install directly from the GitHub repo:
 ```sh
 # v0.1 ship path: build a tarball locally, then install it in your app.
 git clone https://github.com/Ridwannurudeen/sealedlaunch.git
-cd liftoff/sdk && npm install && npm run build && npm pack
+cd sealedlaunch/sdk && npm install && npm run build && npm pack
 # then in your app:
 npm i path/to/sealed-launch-sdk-0.1.0.tgz viem
 ```
